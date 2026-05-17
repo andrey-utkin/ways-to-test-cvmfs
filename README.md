@@ -33,11 +33,20 @@ cd ways-to-test-cvmfs
 
 To access the resulting VM, run `incus shell ways-to-test-cvmfs-archlinux`
 
-## Use
+### Demo
 
+To view how the setup will go, run:
 
 ```bash
-# Inside VM:
+asciinema play https://autkin.net/tmp/wtt-setup.asciicast
+```
+
+(The recording is slightly over 16M so can't be uploaded to asciinema.org)
+
+
+## Use
+
+```bash
 cd /usr/local/src/ways-to-test-cvmfs # base dir
 cd testability # "flavour" - the level of hierarchy meant for various builds of any one particular branch
 cd podman # "engine" - containerization engine used, docker is another option
@@ -50,4 +59,51 @@ make NPROC=8 pooled.ci.done # override container pool size
 make ci.done # run end-to-end tests in disposable containers. NPROC jobs in parallel. Slower than pooled.ci.done
 make ci_ubuntu.sh.done # Closely resembles ci_ubuntu.yml GHA job - end-to-end tests ran serially. Slow.
 make ci.500-mkrepo.done # Run any end-to-end test in a fresh container.
+```
+
+### Demo
+
+```bash
+# Inside VM:
+ $ cd /usr/local/src/ways-to-test-cvmfs # base dir
+ $ ls
+ccache
+ci.sh
+ci_ubuntu.sh
+common_makefile
+create-vm-archlinux
+cvmfs.git
+_distros
+go_pkg_mod
+list-active-e2e-tests
+list-active-e2e-tests.ci_ubuntu
+list-active-tests.ci_ubuntu
+Makefile
+one-ci-test.sh
+pooled.ci.create-containers
+pooled.ci.one-test
+testability
+test.runner.with-systemd.bash
+tests.excludes.list
+work.sh
+
+ $ cd testability # "flavour" - the level of hierarchy meant for various builds of any one particular branch
+ $ ls
+podman
+
+ $ cd podman # "engine" - containerization engine used, docker is another option
+ $ ls
+almalinux_9
+centos_9
+fedora_43
+ubuntu_24.04
+
+ $ cd ubuntu_24.04 # "distro"
+ $ ls -l
+total 8
+-rw-r--r--  1 root root    0 May 17 14:30 build.done
+-rw-r--r--  1 root root    0 May 17 14:17 builder.image.done
+drwxr-xr-x 23 root root 4096 May 17 14:29 cvmfs
+-rw-r--r--  1 root root   40 May 17 13:11 local.mk
+lrwxrwxrwx  1 root root   24 May 17 13:11 Makefile -> ../../../common_makefile
 ```
