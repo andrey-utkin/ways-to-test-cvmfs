@@ -86,7 +86,18 @@ testability
 test.runner.with-systemd.bash
 tests.excludes.list
 work.sh
+```
 
+```bash
+ $ cd /usr/local/src/ways-to-test-cvmfs # base dir
+ $ make tests.done # all tests in all distros
+```
+[![asciicast](https://asciinema.org/a/yCGB9EQ6sRYjjRi1.svg)](https://asciinema.org/a/yCGB9EQ6sRYjjRi1)
+
+(`asciinema play https://autkin.net/tmp/wtt-make-tests.asciicast`)
+
+
+```bash
  $ cd testability # "flavour" - the level of hierarchy meant for various builds of any one particular branch
  $ ls
 podman
