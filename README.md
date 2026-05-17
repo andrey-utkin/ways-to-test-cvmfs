@@ -96,6 +96,9 @@ work.sh
 
 (`asciinema play https://autkin.net/tmp/wtt-make-tests.asciicast`)
 
+In the base directory, you create directories for "flavours", which mean a direction of work, most probably a specific branch of codebase, common for all workcopies under it.
+
+You can use either podman or docker, or both at the same time to see how tests work in them.
 
 ```bash
  $ cd testability # "flavour" - the level of hierarchy meant for various builds of any one particular branch
