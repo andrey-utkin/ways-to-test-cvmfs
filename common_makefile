@@ -1,0 +1,492 @@
+-include *.mk
+
+SHELL := /bin/bash
+
+DIRNAME = $(shell basename $$PWD)
+UPDIRNAME = $(shell basename $(shell readlink -f ..))
+UPUPDIRNAME = $(shell basename $(shell readlink -f ../..))
+# does not match Docker's base image name, no colon
+MY_DISTRO := ${DIRNAME}
+# docker or podman
+ENGINE := ${UPDIRNAME}
+NETWORK ?= $(shell if [[ ${ENGINE} == podman ]]; then echo --network=private; else echo --network=bridge; fi)
+FLAVOUR := ${UPUPDIRNAME}
+LOCAL_GIT_STORE := $(shell readlink -f ../../../cvmfs.git)
+GIT_ORIGIN := ${LOCAL_GIT_STORE}
+#GIT_ORIGIN := https://github.com/cvmfs/cvmfs.git
+GIT_BRANCH ?= devel
+IMAGE_NAME := cvmfs-autkin:${MY_DISTRO}
+BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-with-build
+PACKAGED_INSTALL_DEB_IMAGE_NAME := ${FLAVOUR}:${MY_DISTRO}-with-deb
+CONTAINER_NAME := ${FLAVOUR}-${MY_DISTRO}
+WORKCOPY_IN_HOST := $(shell readlink -f cvmfs)
+CCACHE_IN_HOST := $(shell readlink -f ../../../ccache)
+CCACHE_IN_CONTAINER := /root/.ccache
+GO_PKG_MOD_IN_HOST := $(shell readlink -f ../../../go_pkg_mod)
+GO_PKG_MOD_IN_CONTAINER := /root/go/pkg/mod
+LIBDNF5_CACHE_IN_HOST := $(shell readlink -f ../../../var_cache_libdnf5)
+WORKCOPY_IN_CONTAINER := /usr/local/src/cvmfs
+NPROC ?= $(shell nproc)
+#NPROC := 3
+CMAKE_EXTRA_OPTS ?= ""
+
+.PHONY: default debug clean wipe-build-image mrproper lint lint-fix shell.with-systemd
+default: tests.done
+
+debug:
+	head -n1 ../../../_distros/${MY_DISTRO}/Dockerfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
+	@#echo ${MY_DISTRO}
+	@#echo ${ENGINE}
+	@#echo ${FLAVOUR}
+	echo ${NETWORK}
+	@#echo ${GIT_ORIGIN}
+	@#echo ${GIT_BRANCH}
+	@#echo ${IMAGE_NAME}
+
+clean:
+	rm -f *.done *.tests.FAILED
+
+wipe-build-image:
+	${ENGINE} stop ${CONTAINER_NAME} || true
+	${ENGINE} rm ${CONTAINER_NAME} || true
+	${ENGINE} image rm -f ${BUILD_IMAGE_NAME} || true
+	rm -f build.done
+
+wipe-build-except-externals: wipe-build-image
+	cd cvmfs && git clean -dxf --exclude externals --exclude externals_build* --exclude externals_install*
+
+mrproper:
+	make clean
+	make wipe-build-image
+	${ENGINE} image rm -f ${IMAGE_NAME} || true
+	rm -rf cvmfs
+	@echo CCACHE IS LEFT INTACT
+
+# TODO try also cvmfs/ci/run_tidy.sh
+lint: build.done
+	cp ../../../lint "${WORKCOPY_IN_HOST}"/
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint
+
+lint-fix: build.done
+	cp ../../../lint "${WORKCOPY_IN_HOST}"/
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint -fix
+
+builder.image.done:
+	if [[ ${ENGINE} == podman ]] && ! grep -q 'options overlay .*index=off' /etc/modprobe.d/overlay.conf; then echo "With podman, you may see errors like 'overlayfs: failed to verify upper' unless you use 'index=off' option with 'overlay' kernel module, see https://docs.oracle.com/en/operating-systems/uek/6/relnotes6.0/31025483.html"; exit 1; fi
+	head -n1 ../../../_distros/${MY_DISTRO}/Dockerfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
+	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} inspect "${IMAGE_NAME}" || ${ENGINE} build --network host . --tag "${IMAGE_NAME}"
+	touch $@
+
+cvmfs/cvmfs/cvmfs.cc:
+	git clone ${GIT_ORIGIN} --branch ${GIT_BRANCH} --reference-if-able ${LOCAL_GIT_STORE} --dissociate cvmfs
+
+CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
+#CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
+
+build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
+	mkdir -p "${GO_PKG_MOD_IN_HOST}"
+	${ENGINE} stop "${CONTAINER_NAME}" || true
+	${ENGINE} rm "${CONTAINER_NAME}" || true
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
+	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
+	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}"  bash -l -c "cmake  . -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
+	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
+	touch $@
+
+packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
+	echo ${MY_DISTRO} | grep 'ubuntu\|debian'
+	mkdir -p "${GO_PKG_MOD_IN_HOST}"
+	${ENGINE} stop "${CONTAINER_NAME}" || true
+	${ENGINE} rm "${CONTAINER_NAME}" || true
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" /sbin/init
+	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
+	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}"  bash -l -x -c "mk-build-deps ./packaging/debian/cvmfs/control && apt install -y ./cvmfs-build-deps_*_all.deb && apt install -y apache2 libapache2-mod-wsgi-py3 && export CMAKE_CXX_COMPILER_LAUNCHER=ccache && export CVMFS_EXTERNALS_PREFIX=/usr/local/src/cvmfs/cvmfs_externals_install && mkdir /tmp/build-ubuntu /tmp/build-ubuntu-config && ./ci/build_package.sh \$$PWD /tmp/build-ubuntu-config cvmfs-config && ./ci/build_package.sh \$$PWD /tmp/build-ubuntu cvmfs && apt-get -y remove 'cvmfs*' && apt-get -y install /tmp/build-ubuntu*/*.deb && systemctl enable apache2"
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
+	${ENGINE} commit "${CONTAINER_NAME}" "${PACKAGED_INSTALL_DEB_IMAGE_NAME}"
+	touch $@
+
+tests.done: unittests-parallel.done pooled.ci.done-and-toredown
+	touch $@
+
+# if testing upstream way, we need to launch systemd
+ingestsql-test.with-systemd.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
+	cp ingestsql-test.with-systemd.bash "${WORKCOPY_IN_HOST}"/
+	${ENGINE} run --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" ./ingestsql-test.with-systemd.bash || touch ${CONTAINER_NAME}-with-systemd.tests.FAILED
+	touch $@
+	${ENGINE} cp "${CONTAINER_NAME}-with-systemd":/var/log/tests.logs.tar .
+	zstd --rm -f tests.logs.tar
+	if [[ -f ${CONTAINER_NAME}-with-systemd.tests.FAILED ]]; then echo "TESTS FAILED"; exit 1; fi
+	# ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
+
+# These were found failing for no apparent reason on master on 2026-02-26 (Fedora 43 container inside Archlinux VM)
+#UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.Initv2:T_Libcvmfs.InitFailures:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_TestUtilities.GetParentPid:T_Util.ManagedExecExecuteBinaryDoubleFork
+UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.InitFailures:T_Libcvmfs.Initv2:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_Util.ManagedExecExecuteBinaryDoubleFork
+UNITTESTS_FLAKY := T_Dns.CaresResolverFinalDot
+UNITTESTS_FAILING_WHEN_NOT_SERIALIZED := "T_Download.*:T_IngestionStress.*:T_Uploaders/0.*:T_Util.Lsof"
+UNITTESTS_FAILING_WHEN_PID1 := T_TestUtilities.GetParentPid
+# [1067/1080] T_CatalogManagerClient.LoadByHashNetworkFailure (20273 ms)
+# [1068/1080] T_CatalogManagerClient.LoadRootCatalog (20273 ms)
+# [1069/1080] T_CatalogManagerClient.LoadByHash (20541 ms)
+# [1070/1080] T_UtilConcurrency.MultiThreadedFifoChannel (7446 ms)
+# [1071/1080] T_Libcvmfs.StatNestedCatalog (19807 ms)
+# [1072/1080] T_QuotaManager.CleanupLru (16383 ms)
+# [1073/1080] T_StatisticsSql.SchemaMigration1To3 (12651 ms)
+# [1074/1080] T_CatalogMgrRw.GraftNestedCatalog (23953 ms)
+# [1075/1080] T_CatalogMgrRw.SwapNestedCatalog (24693 ms)
+# [1076/1080] T_Catalog.Lookup (27089 ms)
+# [1077/1080] T_Libcvmfs.ListNestedCatalogs (27087 ms)
+# [1078/1080] T_CatalogMgrRw.CloneTree (29950 ms)
+# [1079/1080] T_CatalogSql.SchemaMigration (36423 ms)
+# [1080/1080] T_CatalogMgrRw.GraftNestedCatalogFail (40379 ms)
+#UNITTESTS_SLOW := "T_CatalogMgrRw.GraftNestedCatalogFail:T_CatalogSql.SchemaMigration:T_CatalogMgrRw.CloneTree:T_Libcvmfs.ListNestedCatalogs:T_Catalog.Lookup:T_CatalogMgrRw.SwapNestedCatalog:T_CatalogMgrRw.GraftNestedCatalog:T_StatisticsSql.SchemaMigration1To3:T_QuotaManager.CleanupLru:T_Libcvmfs.StatNestedCatalog:T_CatalogManagerClient.LoadByHash:T_CatalogManagerClient.LoadRootCatalog:T_CatalogManagerClient.LoadByHashNetworkFailure"
+
+# # grep '[0-9]\{5,\} ms' unittests-parallel.times.saved | cut -d ' ' -f 2 | tr '\n' ':'
+# [935/1097] T_CatalogMergeTool.CRUD (10354 ms)
+# [948/1097] T_StatisticsSql.SchemaMigration1To3 (12226 ms)                                                                                                      [958/1097] T_CatalogManagerClient.LoadByHash (16566 ms)
+# [966/1097] T_CatalogMergeTool.Symlink (10823 ms)                                                                                                               [1035/1097] T_CatalogMgrRw.CloneTree (28379 ms)
+# [1040/1097] T_CatalogManagerClient.LoadByHashNetworkFailure (13298 ms)
+# [1066/1097] T_Libcvmfs.StatNestedCatalog (13389 ms)
+# [1071/1097] T_CatalogSql.SchemaMigration (40679 ms)
+# [1072/1097] T_CatalogManagerClient.LoadRootCatalog (11785 ms)
+# [1074/1097] T_CatalogMgrRw.SwapNestedCatalog (15138 ms)
+# [1077/1097] T_Catalog.Lookup (17602 ms)
+# [1082/1097] T_Libcvmfs.ListNestedCatalogs (16374 ms)
+UNITTESTS_SLOW := T_CatalogMergeTool.CRUD:T_StatisticsSql.SchemaMigration1To3:T_CatalogManagerClient.LoadByHash:T_CatalogMergeTool.Symlink:T_CatalogMgrRw.CloneTree:T_CatalogManagerClient.LoadByHashNetworkFailure:T_Libcvmfs.StatNestedCatalog:T_CatalogSql.SchemaMigration:T_CatalogManagerClient.LoadRootCatalog:T_CatalogMgrRw.SwapNestedCatalog:T_Catalog.Lookup:T_Libcvmfs.ListNestedCatalogs
+
+# T_GlueBuffer.StringHeap allocates upwards of 4 GiB and hangs on failure.
+UNITTESTS_MEMORY_HOGS := T_GlueBuffer.StringHeap
+UNITTESTS_FILTER_DEFAULT := "-*Slow:T_Smalloc.Big*:${UNITTESTS_FAILING}:${UNITTESTS_FAILING_WHEN_PID1}:${UNITTESTS_MEMORY_HOGS}"
+UNITTESTS_FILTER_FAST := "${UNITTESTS_FILTER_DEFAULT}:${UNITTESTS_FAILING_WHEN_NOT_SERIALIZED}:${UNITTESTS_SLOW}"
+
+UNITTESTS_FILTER ?= ${UNITTESTS_FILTER_DEFAULT}
+
+#UNITTESTS_FILTER := T_IngestionStress.ProcessEmptyFile
+
+UNITTESTS_RR := rr record --output-trace-dir ${WORKCOPY_IN_CONTAINER}/rr-recording
+
+unittests.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+	touch $@
+
+unittests.with-systemd.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}"  "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+
+unittests-rr.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
+	rm -rf ${WORKCOPY_IN_HOST}/rr-recording
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_break_on_failure
+	touch $@
+
+.PHONY: unittests-rr-replay
+unittests-rr-replay:
+	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
+	${ENGINE} run -it --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v ${HOME}/.gdbinit:/root/.gdbinit --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" rr replay ${WORKCOPY_IN_CONTAINER}/rr-recording -- -ex 'handle SIG32 nostop' -ex continue -ex backtrace -ex reverse-finish -ex reverse-finish -ex reverse-finish -ex backtrace
+
+unittests-parallel.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	# --output_dir="${WORKCOPY_IN_CONTAINER}"/gtest-parallel-out
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+	touch $@
+
+unittests-parallel.with-systemd.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp  "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+
+unittests-fast.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	# --output_dir="${WORKCOPY_IN_CONTAINER}"/gtest-parallel-out
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp # --print_test_command
+	touch $@
+
+unittests-fast.with-systemd.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp  "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+
+# Failed under
+# DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu_unittest.yaml
+UNITTESTS_FAILING_UNDER_ACT := T_FsTraversal.BlockDevice:T_Util.ManagedExecExecuteBinaryDoubleFork
+unittests-act.done: cvmfs/cvmfs/cvmfs.cc
+	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
+	cd cvmfs && DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu_unittest.yaml
+	touch $@
+
+ci_ubuntu.done: cvmfs/cvmfs/cvmfs.cc
+	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
+	cd cvmfs && DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu.yaml --privileged
+	touch $@
+
+.PHONY: format-staged
+format-staged: build.done
+	pushd cvmfs \
+	&& git diff --staged \
+	| ${ENGINE} run --interactive --rm -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /usr/share/clang/clang-format-diff.py -i -v -p1
+
+FROM ?= HEAD^
+TO ?= HEAD
+.PHONY: format-from-to
+#.PHONY: format-last-commit
+format-from-to: build.done
+#format-last-commit:
+	pushd cvmfs \
+	&& git diff -U0 "${FROM}" "${TO}" \
+	| ${ENGINE} run --interactive --rm -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /usr/share/clang/clang-format-diff.py -i -v -p1
+
+.PHONY: format-last-commit
+format-last-commit:
+	make format-from-to
+
+# Not sure why these options, they are used in .github/workflows/linter.yaml as of 2026-03-20
+TIDY_STRANGE_OPTS := -extra-arg=-I${WORKCOPY_IN_CONTAINER}/cvmfs -extra-arg=-I${WORKCOPY_IN_CONTAINER}/test/common -extra-arg=-DCVMFS_USE_LIBFUSE=3 -allow-no-checks
+.PHONY: tidy-staged
+tidy-staged: build.done
+	pushd cvmfs \
+	&& git diff --staged \
+	| ${ENGINE} run --interactive --rm -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /usr/share/clang/clang-tidy-diff.py -path . -p1 -fix -config-file=.clang-tidy -j${NPROC} ${TIDY_STRANGE_OPTS}
+
+.PHONY: tidy-from-to
+#.PHONY: tidy-last-commit
+tidy-from-to: build.done
+#tidy-last-commit:
+	#&& git diff -U0 "${FROM}" "${TO}"
+	pushd cvmfs \
+	&& git diff -U0 "${FROM}" "${TO}" -- . :^test/quickcheck \
+	| ${ENGINE} run --interactive --rm -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /usr/share/clang/clang-tidy-diff.py -path . -p1 -fix -config-file=.clang-tidy -j${NPROC} ${TIDY_STRANGE_OPTS}
+
+.PHONY: tidy-last-commit
+tidy-last-commit:
+	make tidy-from-to
+
+shell.with-systemd: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
+	${ENGINE} run --detach --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
+
+cmd.with-systemd: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
+	${ENGINE} run --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" ${CMD}
+
+../../../iplocation.mmdb:
+	cd ../../.. && make iplocation.mmdb
+
+cvmfs/test/src/%/main: ;
+test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.mmdb
+	# this is how I would go about reusing an already-running container:
+	# ${ENGINE} inspect "${CONTAINER_NAME}-$*" | jq --raw-output .[0].State.Status | grep running || ...
+	${ENGINE} rm -f "${CONTAINER_NAME}-$*" || true
+	cp ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
+	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$*" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --cap-add=MKNOD --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} cp ~/.gdbinit ${CONTAINER_NAME}-$*:/root/ || true
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -x cvmfs_config setup
+	cd ../../../ && make ENGINE=${ENGINE} CONTAINER_NAME=${CONTAINER_NAME}-$* geodb-install-into-container
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -c 'echo CVMFS_IPV4_ONLY=1 >> /etc/cvmfs/default.conf'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight "${CONTAINER_NAME}-$*" ./test.runner.with-systemd.bash $* # || touch ${CONTAINER_NAME}-$*.tests.FAILED
+	${ENGINE} cp "${CONTAINER_NAME}-$*":/var/log/tests.logs.tar .
+	zstd --rm -f tests.logs.tar
+	mv tests.logs.tar.zst tests.logs.$(shell date +%F_%T).tar.zst
+	if [[ -f ${CONTAINER_NAME}-$*.tests.FAILED ]]; then echo "TESTS FAILED"; exit 1; fi
+	# # ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
+	touch $@
+
+deb-ci_ubuntu.sh.done: packaged-install-deb.done
+	make ci_ubuntu.sh.done BUILD_IMAGE_NAME=${PACKAGED_INSTALL_DEB_IMAGE_NAME}
+
+#ci_ubuntu.sh.done: build.done
+ci_ubuntu.sh.done:
+	# this is how I would go about reusing an already-running container:
+	# ${ENGINE} inspect "${CONTAINER_NAME}-with-systemd" | jq --raw-output .[0].State.Status | grep running || ...
+	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
+	cp ../../../ci_ubuntu.sh "${WORKCOPY_IN_HOST}"/
+	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
+	${ENGINE} run --detach --name "${CONTAINER_NAME}-$@" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	#@${ENGINE} cp ~/.gdbinit ${CONTAINER_NAME}-with-systemd:/root/ || true
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -x cvmfs_config setup
+	cd ../../../ && make ENGINE=${ENGINE} CONTAINER_NAME=${CONTAINER_NAME}-$@ geodb-install-into-container
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" useradd -m sftnight || true
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'echo "sftnight ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight "${CONTAINER_NAME}-$@" ./ci_ubuntu.sh; \
+		RC=$$?; \
+		${ENGINE} cp "${CONTAINER_NAME}-$@":/var/log/tests.logs.tar .; \
+		zstd --rm -f tests.logs.tar; \
+		mv tests.logs.tar.zst tests.logs.$(shell date +%F_%T).tar.zst; \
+		touch $@
+
+ci.%.done: build.done cvmfs/test/src/%/main
+	@ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
+	       ../../../one-ci-test.sh $* &> $@.wip
+	@mv $@.wip $@
+	@if [[ -f ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
+
+pooled.ci.%.done: build.done cvmfs/test/src/%/main
+	@ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
+	       ../../../pooled.ci.one-test $* &> $@.wip
+	@mv $@.wip $@
+	@if [[ -f pooled.ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
+
+.PHONY: pooled.ci.clean
+pooled.ci.clean:
+	ls pooled.ci.*.FAILED | wc -l; ls pooled.ci.*.PASSED | wc -l
+	rm -rf pooled.ci.done pooled.ci.*.done  pooled.ci.*.log  pooled.ci.*.done.wip  pooled.ci.*.PASSED  pooled.ci.*.FAILED  pooled.ci.*.logs.*.tar.zst
+	rm -f pooled.ci.setup # to reset time calculations
+
+.PHONY: ci.clean
+ci.clean:
+	ls        ci.*.FAILED | wc -l; ls        ci.*.PASSED | wc -l
+	rm -rf        ci.done        ci.*.done         ci.*.log         ci.*.done.wip         ci.*.PASSED         ci.*.FAILED         ci.*.logs.*.tar.zst
+
+.PHONY: pooled.ci.status
+pooled.ci.status:
+	@ls container-pool/* || true
+	@echo -n "STARTED: "; qalc --terse "now - stamptodate($(shell stat -c %Y -- pooled.ci.setup 2>/dev/null))" | grep -v stamptodate || echo
+	@echo -n "ENDED: ";   qalc --terse "now - stamptodate($(shell stat -c %Y -- pooled.ci.done  2>/dev/null))" | grep -v stamptodate || echo
+	@echo -n "TOOK: ";   qalc --terse "stamptodate($(shell stat -c %Y -- pooled.ci.done 2>/dev/null)) - stamptodate($(shell stat -c %Y -- pooled.ci.setup 2>/dev/null))" | grep -v stamptodate || echo
+	@grep -o 'load.*' pooled.ci.done 2>/dev/null || uptime | grep -o 'load.*'
+	wc -l tests.list
+	ls pooled.ci.*.PASSED 2>/dev/null | wc -l
+	ls pooled.ci.*.FAILED 2>/dev/null | wc -l
+	@ls -1 pooled.ci.*.FAILED 2>/dev/null || true
+
+.PHONY: ci.status
+ci.status:
+	ls ci.*.PASSED 2>/dev/null | wc -l
+	ls ci.*.FAILED 2>/dev/null | wc -l
+	@ls -1 ci.*.FAILED 2>/dev/null || true
+
+.PHONY: ci.failures
+ci.failures:
+	for test in $(shell ls *.FAILED | cut -d . -f 3); do for tar in *ci.$$test.*zst; do tar --to-stdout -xaf $$tar tmp/test.log; done; done
+
+pool-teardown:
+	cd container-pool \
+		&& for dir in booting available taken; do \
+			pushd $$dir \
+			&& (for x in *; do ${ENGINE} exec $$x systemctl poweroff || true; done) \
+			&& popd; \
+		done \
+		|| true
+	rm -rf container-pool
+	rm -f pooled.ci.pool-boot.done
+
+TESTS_LIST ?= tests.list
+ci.done: build.done ${TESTS_LIST}
+	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
+	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
+	SHOULDBE=shuf ORMAYBE=cat cat ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${NPROC} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} bash
+	ls ci.*.FAILED | wc -l
+	ls ci.*.PASSED | wc -l
+	shopt -s nullglob; tar --force-local -caf ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* ci.*.FAILED ci.*.PASSED pooled.ci.*.done
+	touch $@
+
+pooled.ci.setup: build.done
+	mkdir -p container-pool/{booting,available,taken,failed,dead}
+	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
+	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
+	touch $@
+
+pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
+	ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
+	       NETWORK=${NETWORK} \
+		../../../pooled.ci.create-containers "${NPROC}"
+	touch $@
+
+pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
+	ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
+	       NPROC=${NPROC} \
+		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
+	SHOULDBE=shuf ORMAYBE=cat shuf ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${NPROC} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} bash
+	@echo
+	ls pooled.ci.*.FAILED | wc -l
+	ls pooled.ci.*.PASSED | wc -l
+	shopt -s nullglob; tar --force-local -caf pooled.ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* pooled.ci.*.FAILED pooled.ci.*.PASSED pooled.ci.container.*.log pooled.ci.*.done
+	uptime > $@ # save loadavg
+	#touch $@
+
+pooled.ci.done-and-toredown:
+	ENGINE=${ENGINE} \
+	       make pool-teardown pooled.ci.clean ; \
+	       \
+	       ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
+	       NPROC=${NPROC} \
+	       TESTS_LIST=${TESTS_LIST} \
+	       make pooled.ci.done; \
+	       \
+	       ENGINE=${ENGINE} \
+	       make pool-teardown
+
+
+ci.sh.done:
+	cd cvmfs && ENGINE=${ENGINE} \
+	       CONTAINER_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       NPROC=${NPROC} \
+	       ../../../../ci.sh
+	touch $@
+
+tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
+	ls cvmfs/test/src > $@.all-existing
+	(cd cvmfs && ../../../../list-active-tests.ci_ubuntu) > $@.selected
+	# harness level (ways-to-test) exclusions
+	HARNESS_LEVEL_EXCL_FILE=../../../tests.excludes.list; \
+	FLAVOUR_LEVEL_EXCL_FILE=../../tests.excludes.list; \
+	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
+		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
+	else \
+		PF1=/dev/null; \
+	fi; \
+	if [[ -f $$FLAVOUR_LEVEL_EXCL_FILE ]]; then \
+		PF2=$$FLAVOUR_LEVEL_EXCL_FILE; \
+	else \
+		PF2=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	mv $@.wip $@

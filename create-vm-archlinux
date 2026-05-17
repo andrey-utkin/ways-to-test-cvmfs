@@ -1,0 +1,123 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+
+
+: ${VM_NAME:=local:ways-to-test-cvmfs-archlinux}
+: ${VM_HOSTNAME:=ways-to-test-cvmfs}
+GIT_STORE_BASEDIR=$(readlink -f ..)
+MOUNTED_REPOS=(ways-to-test-cvmfs cvmfs)
+for repo in ${MOUNTED_REPOS[@]}; do
+	# We have a *complete* workcopy (otherwise inside the container the mount will be incomplete)
+	if [[ -e "$GIT_STORE_BASEDIR"/"$repo".git/objects/info/alternates ]]; then exit 1; fi
+done
+
+which jq
+
+# enp5s0: in archlinux, ubuntu...
+IFNAME=enp5s0
+
+# If you get an error:
+# Error: Cannot override config for device "root": Device not found in profile devices
+# specify your Incus storage pool (e.g. `--storage=dev`)
+: ${STORAGE:=default}
+incus create --storage="$STORAGE" --vm images:archlinux "${VM_NAME}" -c security.secureboot=false -c security.nesting=true -c security.privileged=true -c limits.memory=2GiB -c limits.cpu=1 -d root,size=100GiB
+# T_GlueBuffer.StringHeap unittest allocates upwards of 4 GiB at once, so more must be allocated.
+# On failure, that test will hang. Consider 6GiB lower bound, or exclude that test.
+# Building CVMFS fails with 1GiB, 2GiB works.
+# The more CPU, the better.
+
+for repo in ${MOUNTED_REPOS[@]}; do
+	incus config device add "${VM_NAME}" "$repo" disk source="$GIT_STORE_BASEDIR/${repo}.git" path=/usr/local/src/"$repo".git shift=true readonly=false required=true
+done
+
+incus start "$VM_NAME"
+# Wait for ipv4 IP
+while ! incus list --format json $(echo "${VM_NAME}" | sed -e 's/:/: /') | jq --raw-output .[0].state.network."$IFNAME".addresses[0].address | grep -F . >/dev/null; do echo -n .; sleep 1; done
+
+# TODO
+# fix Archlinux remote repo to a specific date
+# https://wiki.archlinux.org/title/Arch_Linux_Archive#How_to_restore_all_packages_to_a_specific_date
+
+incus exec "${VM_NAME}" -- bash -euo pipefail -x <<EOF
+while ! (systemctl is-active multi-user.target && ping -c1 -W1 google.com)&>/dev/null; do sleep 1; done
+echo options overlay index=off > /etc/modprobe.d/overlay.conf
+echo overlay > /etc/modules
+echo overlay > /etc/modules-load.d/overlay.conf
+
+echo 'kernel.perf_event_paranoid = 1' > /etc/sysctl.d/10-rr.conf
+sysctl -w kernel.perf_event_paranoid=1
+
+hostnamectl hostname $VM_HOSTNAME
+
+pacman -Sy --noconfirm \
+	bash-completion \
+	bc \
+	btop \
+	colordiff \
+	crun \
+	debugedit \
+	fakeroot \
+	git \
+	iotop \
+	jq \
+	less \
+	libqalculate \
+	make \
+	mc \
+	ncdu \
+	neovim \
+	nnn \
+	pigz \
+	podman \
+	podman-compose \
+	ripgrep \
+	rsync \
+	sudo \
+	tmux \
+	virtme-ng \
+	which \
+	;
+#pacman -Sy --noconfirm docker docker-compose
+EOF
+
+for repo in ${MOUNTED_REPOS[@]}; do
+	incus exec "${VM_NAME}" -- git config --global --add safe.directory /usr/local/src/"$repo".git
+done
+
+# We clone onto VM's own disk, as we cannot directly run from the mounted directory, because we get:
+#running CernVM-FS client test cases...
+#test.sh: ./run.sh: /bin/bash: bad interpreter: Bad address
+#running CernVM-FS server test cases...
+#test.sh: ./run.sh: /bin/bash: bad interpreter: Bad address
+incus exec "${VM_NAME}" -- bash -e <<EOF
+cd /usr/local/src
+git clone /usr/local/src/ways-to-test-cvmfs.git
+cd ways-to-test-cvmfs
+ln -sv ../cvmfs.git .
+EOF
+
+mkdir -p ./ccache
+incus config device add "$VM_NAME" ccache disk source="$PWD/ccache" path=/usr/local/src/ways-to-test-cvmfs/ccache shift=true readonly=false required=true
+
+# conveniences
+pushd ~
+tar -cf - \
+.bash \
+.bash_profile \
+.bashrc \
+.config/nvim/init.vim \
+.gdbinit \
+.gitconfig \
+.inputrc \
+.tmux.conf \
+.vimrc \
+| incus exec "${VM_NAME}" -- tar -xf - \
+|| true
+popd
+
+
+
+incus exec --cwd /usr/local/src/ways-to-test-cvmfs "$VM_NAME" -- bash -l <<EOF
+make --keep-going build.done
+EOF

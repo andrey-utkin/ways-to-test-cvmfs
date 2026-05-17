@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+[[ -f cvmfs/cvmfs.cc ]]
+
+cd test
+
+comm -23 \
+	<(grep -l 'cvmfs_test_suites=.*quick' src/[015678]*/main | sed s:/main:: | sort) \
+	<(grep 'src/[0-9]\+-' ../.github/workflows/ci_ubuntu.yaml | sed -e 's: -x ::' -e 's: ::g' -e 's:[\]::' | sort) \
+	| sed -e 's:^src/::' \
+	| grep -v '059-fallbackproxy\|615-externaldata\|691-metalink\|THEY_USE_example.com_AS_PROXY_AND_TIME_OUT'

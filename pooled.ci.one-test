@@ -1,0 +1,59 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+shopt -s nullglob
+
+# one test name is the parameter for now, but this could change
+[[ $# == 1 ]]
+
+#export DOCKER_HOST=unix:///run/podman/podman.sock
+#PRIORITIZE=(nice -n19  ionice -c3  taskset --cpu-list $(( RANDOM % "$(nproc)" )) )
+#PRIORITIZE=(nice -n19  ionice -c3)
+PRIORITIZE=()
+
+pick_container() {
+	pushd container-pool/available &>/dev/null
+	while true; do
+		for CANDIDATE in *; do
+			if [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then
+				echo "$@" > ../taken/"$CANDIDATE"
+				echo "$CANDIDATE"
+				return 0
+			fi
+		done
+		sleep 1
+		continue
+	done
+	popd &>/dev/null
+}
+
+CONTAINER_ID=$(pick_container $@)
+EXEC_LOG=pooled.ci."$1".log
+CONT_LOG=pooled.ci.container."$CONTAINER_ID".log
+echo $(date '+%F_%T') TAKEN BY "$@" >> "$CONT_LOG"
+cleanup() {
+	mv container-pool/taken/"$CONTAINER_ID" container-pool/available/
+	echo $(date '+%F_%T') RELEASED BY "$@" >> "$CONT_LOG"
+}
+trap cleanup HUP INT TERM EXIT
+
+set +e
+"${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight "${CONTAINER_ID}" ./test.runner.with-systemd.bash "$@" &> "$EXEC_LOG"
+RC=$?
+set -e
+logs_filename=$(mktemp --tmpdir=. --suffix=.tar pooled.ci."$1".logs.XXXXXXX)
+"${PRIORITIZE[@]}" ${ENGINE} cp "${CONTAINER_ID}":/var/log/tests.logs.tar "$logs_filename"
+trap - HUP INT TERM EXIT
+cleanup
+"${PRIORITIZE[@]}" zstd --fast --rm --force "$logs_filename" &>/dev/null
+if [[ "$RC" == 0 ]] \
+then
+	echo $(date '+%F_%T') "$1 PASSED" | tee -a "$CONT_LOG"
+	mv "$EXEC_LOG" pooled.ci."$1".PASSED
+else
+	echo $(date '+%F_%T') "$1 FAILED" | tee -a "$CONT_LOG"
+	mv "$EXEC_LOG" pooled.ci."$1".FAILED
+fi
+
+#exit "$RC"
+exit 0

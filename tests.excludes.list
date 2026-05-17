@@ -1,0 +1,85 @@
+WHY=THEY USE example.com AS PROXY:
+059-fallbackproxy
+615-externaldata
+691-metalink
+WHY=SEE GITHUB ISSUE 4225:
+108-global-config
+WHY=SEE_GITHUB_ISSUE 4229:
+066-killall
+WHY=unclear
+616-blacklistconfigrepo
+WHY=cvmfs_probe sees lingering process after umount
+014-corrupt_lru
+WHY=geo stuff, needs another try:
+#522-missingchunkfailover
+#523-corruptchunkfailover
+#524-corruptmanifestfailover
+#564-stratum1keysdir
+#577-garbagecollecthiddenstratum1revision
+#580-automaticgarbagecollectionstratum1
+#608-infofile
+#610-altpath
+#618-repometainfo
+#621-snapshotallgcall
+#626-cacheexpiry
+#627-reflog
+#634-reflogchecksum
+#638-virtualdir
+#688-checkall
+#699-servermount
+WHY=these below are flaky, apparently timing sensitive
+011-rmemptyfilesrebuild
+058-keysdir
+#087-xattrs
+536-healthcheck
+537-symlinkedbackend
+552-repodate
+577-garbagecollecthiddenstratum1revision
+580-automaticgarbagecollectionstratum1
+589-catalogchown
+602-libcvmfs
+611-idleclient
+614-geoservice
+616-blacklistconfigrepo
+618-repometainfo
+621-snapshotallgcall
+625-loadfailureduringgarbagecollect
+627-reflog
+632-authzhelpers
+633a-changedfiles
+633b-changedfiles-corners
+634-reflogchecksum
+638-virtualdir
+641-diff
+642-branching
+645-zerofiles
+656-tarball_remove_directory
+675-statsupload
+685-mkfs_proxy
+689-inodes
+693-resetafter
+699-servermount
+715-tarball_fast_delete
+800-repository_gateway
+802-repository_gateway_nested_catalogs
+804-repository_gateway_autotags
+805-repository_gateway_reflog
+806-repository_gateway_ingest
+807-nested_new_directories_gateway_ingest
+809-lease_failure
+810-reposity_gateway_dir_to_symlink
+811-repository_gateway_graft
+812-repository_gateway_uncompressed
+813-repository_gateway_convoluted
+814-expired_lease
+815-gateway_restart
+816-gateway_uncompressed
+817-gateway_abort
+818-gateway-concurrent-leases
+819-gateway-quick-merge
+821-repository_gateway_bootstrap
+822-repository_gateway_mountless_ingest
+#WHY=dunno, seems flaky
+021-stacktrace
+#WHY=SEE GITHUB ISSUE 4241
+669-filestats

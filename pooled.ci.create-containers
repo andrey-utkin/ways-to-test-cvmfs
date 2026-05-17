@@ -1,0 +1,68 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+shopt -s nullglob
+
+#export DOCKER_HOST=unix:///run/podman/podman.sock
+#PRIORITIZE=(nice -n19  ionice -c3)
+PRIORITIZE=()
+
+NB_CONTAINERS=$1
+
+launch_one() {
+	CONTAINER_ID=$(
+		# Docker gives warning when
+		# --privileged is used with multiple containers having /dev/fuse.
+		# "path in container /dev/fuse already exists in privileged mode"
+		"${PRIORITIZE[@]}" ${ENGINE} run \
+			--detach \
+			--rm \
+			--privileged \
+			"${NETWORK[@]}" \
+			--cgroupns=host \
+			--device=/dev/fuse \
+			--cap-add=SYS_PTRACE \
+			--cap-add SYS_ADMIN \
+			--tmpfs /cvmfs \
+			--tmpfs /var/spool/cvmfs \
+			--security-opt seccomp=unconfined \
+			-v /sys/fs/cgroup:/sys/fs/cgroup \
+			-v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" \
+			-v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 \
+			"${BUILD_IMAGE_NAME}" /sbin/init
+	)
+	touch "$CONTAINER_ID"
+	(
+		# Docker workaround: exec immediately after run gives "Error setting up exec command in container ABCD: container ABCD is not running"
+		while ! "${PRIORITIZE[@]}" ${ENGINE} exec "$CONTAINER_ID" true; do sleep 1; done
+		"${PRIORITIZE[@]}" ${ENGINE} exec "$CONTAINER_ID" mkdir -p /var/lib/cvmfs-server/geo
+		# PWD is container-pool/booting/
+		"${PRIORITIZE[@]}" ${ENGINE} cp ../../../../../iplocation.mmdb "$CONTAINER_ID":/var/lib/cvmfs-server/geo/
+		"${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" bash -c 'while ! (systemctl status && systemctl is-active multi-user.target && (systemctl start apache2 || systemctl start httpd) && (systemctl is-active apache2 || systemctl is-active httpd) ) &> /dev/null; do echo -n .; sleep 1; done && cvmfs_config setup && (echo CVMFS_IPV4_ONLY=1; echo CVMFS_TIMEOUT=60; echo CVMFS_TIMEOUT_DIRECT=60) >> /etc/cvmfs/default.conf'
+		for attempt in {1..5}; do
+			if "${PRIORITIZE[@]}" ${ENGINE} exec -u sftnight --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" ./test.runner.with-systemd.bash 002-probe; then
+				mv ./"$CONTAINER_ID" ../available/
+				exit 0
+			fi
+		done
+		${ENGINE} inspect "$CONTAINER_ID" > ./"$CONTAINER_ID"
+		if jq --raw-output '.[].State.Status' < ./"$CONTAINER_ID" | grep running; then
+			mv ./"$CONTAINER_ID" ../failed/
+		else
+			mv ./"$CONTAINER_ID" ../dead/
+		fi
+	) &
+}
+
+make  ../../../iplocation.mmdb
+pushd container-pool/booting
+#for x in $(seq 1 "$NB_CONTAINERS"); do
+#	launch_one &
+#done
+NB_IN_POOL=$(find .. -type f -printf '%f\n' | wc -l)
+HOW_MANY_MORE=$(( NB_CONTAINERS - NB_IN_POOL ))
+for i in $(seq 1 "$HOW_MANY_MORE"); do
+	launch_one
+	sleep 1
+done
+wait
