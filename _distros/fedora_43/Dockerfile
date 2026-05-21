@@ -33,6 +33,7 @@ RUN dnf install -y \
 	gzip \
 	httpd \
 	init \
+	inotify-tools \
 	iproute \
 	jemalloc \
 	jemalloc-devel \

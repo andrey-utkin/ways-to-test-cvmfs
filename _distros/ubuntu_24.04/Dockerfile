@@ -31,6 +31,7 @@ RUN apt install -y \
 	golang \
 	gzip \
 	init \
+	inotify-tools \
 	iproute2 \
 	jq \
 	libacl1 \
@@ -42,6 +43,8 @@ RUN apt install -y \
 	libcap-dev \
 	libcap2-bin \
 	libcap2-dev \
+	libfuse-dev \
+	libfuse2t64 \
 	libfuse3-dev \
 	libgtest-dev \
 	libjemalloc-dev \
@@ -94,6 +97,24 @@ RUN \
 	&& git clone https://github.com/google/gtest-parallel /root/.local/lib/python$PY_VER/site-packages/gtest-parallel \
 	&& mkdir -p /usr/local/bin \
 	&& ln -sv /root/.local/lib/python$PY_VER/site-packages/gtest-parallel/gtest-parallel /usr/local/bin/
+
+# igprof-navigator is python 2 and I gave up on it
+#RUN \
+#	apt install -y \
+#	libatomic-ops-dev \
+#	libunwind8 \
+#	libunwind-dev \
+#	;
+#RUN \
+#	cd /usr/local/src \
+#	&& wget https://github.com/igprof/igprof/archive/refs/tags/v5.9.18.tar.gz \
+#	&& tar -xaf v5.9.18.tar.gz \
+#	&& cd igprof-5.9.18 \
+#	&& cmake -D UNWIND_INCLUDE_DIR=/usr/include/x86_64-linux-gnu  . \
+#	&& make install \
+#	;
+
+
 
 # Create the sftnight user
 RUN useradd -m -s /bin/bash sftnight

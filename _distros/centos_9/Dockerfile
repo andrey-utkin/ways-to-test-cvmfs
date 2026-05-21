@@ -21,6 +21,7 @@ RUN dnf install -y \
 	fuse-common \
 	fuse-devel \
 	fuse-libs \
+	fuse3 \
 	fuse3-devel \
 	fuse3-libs \
 	gcc-c++ \
@@ -29,6 +30,7 @@ RUN dnf install -y \
 	golang \
 	gzip \
 	httpd \
+	inotify-tools \
 	iproute \
 	jemalloc \
 	jemalloc-devel \
