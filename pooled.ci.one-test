@@ -12,9 +12,13 @@ shopt -s nullglob
 PRIORITIZE=()
 
 pick_container() {
-	pushd container-pool/available &>/dev/null
+	while ! pushd container-pool/available &>/dev/null; do
+		:
+	done
 	while true; do
+		[[ "$(basename $PWD)" == available ]]
 		for CANDIDATE in *; do
+			[[ -f "$CANDIDATE" ]]
 			if [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then
 				echo "$@" > ../taken/"$CANDIDATE"
 				echo "$CANDIDATE"
@@ -27,7 +31,7 @@ pick_container() {
 	popd &>/dev/null
 }
 
-CONTAINER_ID=$(pick_container $@)
+CONTAINER_ID=$(set -euo pipefail; pick_container $@)
 EXEC_LOG=pooled.ci."$1".log
 CONT_LOG=pooled.ci.container."$CONTAINER_ID".log
 echo $(date '+%F_%T') TAKEN BY "$@" >> "$CONT_LOG"
