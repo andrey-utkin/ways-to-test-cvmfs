@@ -84,14 +84,15 @@ CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/u
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
 
 build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
+	mkdir -p cvmfs/build
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
 	${ENGINE} stop "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
 	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
 	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
 	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}"  bash -l -c "cmake  . -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
 	touch $@
@@ -174,21 +175,21 @@ unittests.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
 	touch $@
 
 unittests.with-systemd.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}"  "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
-	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
 
 unittests-rr.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/rr-recording
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_break_on_failure
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_break_on_failure
 	touch $@
 
 .PHONY: unittests-rr-replay
@@ -201,7 +202,7 @@ unittests-parallel.done: build.done
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
 	# --output_dir="${WORKCOPY_IN_CONTAINER}"/gtest-parallel-out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
 	touch $@
 
 unittests-parallel.with-systemd.done: build.done
@@ -210,14 +211,14 @@ unittests-parallel.with-systemd.done: build.done
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp  "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
-	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
 
 unittests-fast.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
 	# --output_dir="${WORKCOPY_IN_CONTAINER}"/gtest-parallel-out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp # --print_test_command
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --pids-limit=100000 --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs --tmpfs /root/.cache -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp # --print_test_command
 	touch $@
 
 unittests-fast.with-systemd.done: build.done
@@ -226,7 +227,7 @@ unittests-fast.with-systemd.done: build.done
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp  "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
-	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
 
 # Failed under
 # DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu_unittest.yaml
