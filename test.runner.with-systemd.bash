@@ -20,4 +20,5 @@ popd
 shopt -s nullglob # if glob patterns don't match, they disappear rather than passed literally
 killall rsyslogd || true
 sudo tar -caf /var/log/tests.logs.tar  /tmp/*test.log /var/log/*.log /var/log/messages* || true
+cat /tmp/test.log || true
 exit $RET
