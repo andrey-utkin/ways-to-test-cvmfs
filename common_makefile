@@ -80,6 +80,14 @@ builder.image.done:
 cvmfs/cvmfs/cvmfs.cc:
 	git clone ${GIT_ORIGIN} --branch ${GIT_BRANCH} --reference-if-able ${LOCAL_GIT_STORE} --dissociate cvmfs
 
+.PHONY: git-fetch-reset
+git-fetch-reset: cvmfs/cvmfs/cvmfs.cc
+	cd cvmfs \
+	&& git fetch \
+	&& git stash \
+	&& git reset --hard origin/${GIT_BRANCH} \
+	;
+
 CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
 
