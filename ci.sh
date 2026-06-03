@@ -18,7 +18,7 @@ fi
 BUILDER_CONTAINER_NAME=cvmfs-dev__"$FLAVOUR"
 WORKER_CONTAINER_NAME_BASE=cvmfs-ci-worker__"$FLAVOUR"-
 
-time podman rm -f $(podman ps -a --format="{{.Names}}" | grep "$WORKER_CONTAINER_NAME_BASE" || true) || true
+time ${ENGINE} rm -f $(${ENGINE} ps -a --format="{{.Names}}" | grep "$WORKER_CONTAINER_NAME_BASE" || true) || true
 rm -rf "$OUTSIDE_CVMFS_WORKCOPY"/worker
 
 if ! [[ -v NPROC ]]; then
@@ -40,12 +40,12 @@ for worker_i in $(seq 1 "$NPROC"); do
   # /var/spool/cvmfs should be a bucket (or perhaps a tmpfs),
   # because with a bind-mount dir from host,
   # some overlay features may be unsupported and tests will fail.
-  #podman volume rm var_spool_cvmfs-for-server-tests --force
+  #${ENGINE} volume rm var_spool_cvmfs-for-server-tests --force
   #  -v var_spool_cvmfs-for-server-tests:/var/spool/cvmfs \
   #  --tmpfs /var/spool/cvmfs \
 
   # "--security-opt seccomp=unconfined" is for ptrace, so that cvmfs can log its stacktraces
-  "${PRIORITIZE[@]}" podman create --ulimit nice=20 \
+  "${PRIORITIZE[@]}" ${ENGINE} create --ulimit nice=20 \
     --replace \
     --name "$WORKER_CONTAINER_NAME_BASE"$worker_i \
     --privileged \
@@ -59,8 +59,10 @@ for worker_i in $(seq 1 "$NPROC"); do
     --tmpfs /var/spool/cvmfs \
     "$CONTAINER_IMAGE_NAME" \
     /sbin/init \
-    && "${PRIORITIZE[@]}" podman start "$WORKER_CONTAINER_NAME_BASE"$worker_i \
-    && "${PRIORITIZE[@]}" podman exec -u sftnight "$WORKER_CONTAINER_NAME_BASE"$worker_i bash -c \
+    && "${PRIORITIZE[@]}" ${ENGINE} start "$WORKER_CONTAINER_NAME_BASE"$worker_i \
+    && "${PRIORITIZE[@]}" ${ENGINE} exec "$WORKER_CONTAINER_NAME_BASE"$worker_i mkdir -p /var/lib/cvmfs-server/geo \
+    && "${PRIORITIZE[@]}" ${ENGINE} cp "$OUTSIDE_CVMFS_WORKCOPY"/../../../iplocation.mmdb "$WORKER_CONTAINER_NAME_BASE"$worker_i:/var/lib/cvmfs-server/geo/ \
+    && "${PRIORITIZE[@]}" ${ENGINE} exec -u sftnight "$WORKER_CONTAINER_NAME_BASE"$worker_i bash -c \
     "touch /var/log/ci/00-started; while ! (systemctl status && systemctl is-active multi-user.target)&>/dev/null; do sleep 1; done; (sudo cvmfs_config setup && touch /var/log/ci/work.log && touch /var/log/ci/01-booted && nohup taskset --cpu-list $(( RANDOM % "$(nproc)" )) /work.sh &> /var/log/ci/work.log &) || touch /var/log/ci/99-failed" \
     &
 
@@ -103,7 +105,7 @@ wait_until_found_idle_worker() {
         touch "$OUTSIDE_CVMFS_WORKCOPY"/worker/$worker_i/seen-booted
         if ! [[ -f "$OUTSIDE_CVMFS_WORKCOPY"/worker/$worker_i/log/work.log ]]; then
           touch "$OUTSIDE_CVMFS_WORKCOPY"/worker/$worker_i/faulty
-          podman stop --ignore --time 0 "$WORKER_CONTAINER_NAME_BASE"$worker_i
+          ${ENGINE} stop --ignore --time 0 "$WORKER_CONTAINER_NAME_BASE"$worker_i
         fi
       fi
       if [[ -f "$OUTSIDE_CVMFS_WORKCOPY"/worker/$worker_i/faulty ]]; then
@@ -166,7 +168,7 @@ for worker_i in $(seq 1 "$NPROC"); do
       continue
     fi
     # common failure mode: container listed in podman ps but not running and not inspectable
-    if [[ "$(podman inspect "$WORKER_CONTAINER_NAME_BASE"$worker_i | jq --raw-output .[0].State.Running)" != true ]]; then
+    if [[ "$(${ENGINE} inspect "$WORKER_CONTAINER_NAME_BASE"$worker_i | jq --raw-output .[0].State.Running)" != true ]]; then
       break
     fi
     # common failure mode: container listed in podman is running, but no worker process and our log and tmp dir contents are gone, including work.log
@@ -176,7 +178,7 @@ for worker_i in $(seq 1 "$NPROC"); do
     fi
     sleep 1
   done
-  podman stop --ignore --time 0 "$WORKER_CONTAINER_NAME_BASE"$worker_i || true
+  ${ENGINE} stop --ignore --time 0 "$WORKER_CONTAINER_NAME_BASE"$worker_i || true
 done
 
 wait

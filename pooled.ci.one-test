@@ -18,9 +18,8 @@ pick_container() {
 	while true; do
 		[[ "$(basename $PWD)" == available ]]
 		for CANDIDATE in *; do
-			[[ -f "$CANDIDATE" ]]
-			if [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then
-				echo "$@" > ../taken/"$CANDIDATE"
+			if [[ -f "$CANDIDATE" ]] && [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then
+				echo "$@" >> ../taken/"$CANDIDATE"
 				echo "$CANDIDATE"
 				return 0
 			fi

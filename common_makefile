@@ -293,12 +293,12 @@ tidy-last-commit:
 
 shell.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
-	${ENGINE} run --detach --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
 
 cmd.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
-	${ENGINE} run --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" ${CMD}
 
@@ -320,6 +320,7 @@ test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.m
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -c 'echo CVMFS_IPV4_ONLY=1 >> /etc/cvmfs/default.conf'
 	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight "${CONTAINER_NAME}-$*" ./test.runner.with-systemd.bash $* # || touch ${CONTAINER_NAME}-$*.tests.FAILED
 	${ENGINE} cp "${CONTAINER_NAME}-$*":/var/log/tests.logs.tar .
+	tar --to-stdout -xaf tests.logs.tar tmp/test.log > $@.wip && mv $@.wip $@ || true
 	zstd --rm -f tests.logs.tar
 	mv tests.logs.tar.zst tests.logs.$(shell date +%F_%T).tar.zst
 	if [[ -f ${CONTAINER_NAME}-$*.tests.FAILED ]]; then echo "TESTS FAILED"; exit 1; fi
@@ -403,11 +404,12 @@ ci.status:
 ci.failures:
 	for test in $(shell ls *.FAILED | cut -d . -f 3); do for tar in *ci.$$test.*zst; do tar --to-stdout -xaf $$tar tmp/test.log; done; done
 
+.PHONY: pool-teardown
 pool-teardown:
 	cd container-pool \
 		&& for dir in booting available taken; do \
 			pushd $$dir \
-			&& (for x in *; do ${ENGINE} exec $$x systemctl poweroff || true; done) \
+			&& (for x in *; do ${ENGINE} stop --time 0 $$x || true; done) \
 			&& popd; \
 		done \
 		|| true
@@ -440,6 +442,8 @@ pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
 		../../../pooled.ci.create-containers "${NPROC}"
 	touch $@
 
+DATETIME := $(shell date +%F_%T)
+
 pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	ENGINE=${ENGINE} \
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
@@ -450,9 +454,9 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
 	SHOULDBE=shuf ORMAYBE=cat shuf ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${NPROC} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} bash
 	@echo
-	ls pooled.ci.*.FAILED | wc -l
-	ls pooled.ci.*.PASSED | wc -l
-	shopt -s nullglob; tar --force-local -caf pooled.ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* pooled.ci.*.FAILED pooled.ci.*.PASSED pooled.ci.container.*.log pooled.ci.*.done
+	ls pooled.ci.*.FAILED | sed -e 's/pooled.ci.//' -e 's/.FAILED//' | tee pooled.ci.failed-tests.list.${DATETIME} | wc -l
+	ls pooled.ci.*.PASSED | sed -e 's/pooled.ci.//' -e 's/.PASSED//' | tee pooled.ci.passed-tests.list.${DATETIME} | wc -l
+	shopt -s nullglob; tar --force-local -caf pooled.ci.logs.${DATETIME}.tar.zst ${TESTS_LIST}* pooled.ci.*.FAILED pooled.ci.*.PASSED pooled.ci.container.*.log pooled.ci.*.done
 	uptime > $@ # save loadavg
 	#touch $@
 
