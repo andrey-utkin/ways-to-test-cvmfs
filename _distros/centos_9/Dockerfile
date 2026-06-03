@@ -40,6 +40,8 @@ RUN dnf install -y \
 	libattr-devel \
 	libcap-devel \
 	libuuid-devel \
+	libzstd \
+	libzstd-devel \
 	make \
 	openssl \
 	openssl-devel \
@@ -62,11 +64,13 @@ RUN dnf install -y \
 	sudo \
 	systemd \
 	unzip \
+	valgrind \
 	vim \
 	wget \
 	xfsprogs \
 	zlib \
 	zlib-devel \
+	zstd \
 	;
 RUN pip3 install xattr
 
