@@ -13,9 +13,15 @@ PRIORITIZE=()
 
 pick_container() {
 	while ! pushd container-pool/available &>/dev/null; do
-		:
+		if [[ -f container-pool/terminate ]]; then
+			exit 1
+		fi
+		sleep 1
 	done
 	while true; do
+		if [[ -f container-pool/terminate ]]; then
+			exit 1
+		fi
 		[[ "$(basename $PWD)" == available ]]
 		for CANDIDATE in *; do
 			if [[ -f "$CANDIDATE" ]] && [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then

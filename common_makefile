@@ -28,13 +28,16 @@ LIBDNF5_CACHE_IN_HOST := $(shell readlink -f ../../../var_cache_libdnf5)
 WORKCOPY_IN_CONTAINER := /usr/local/src/cvmfs
 NPROC ?= $(shell nproc)
 #NPROC := 3
+POOLSIZE = 8
+POOLSIZE ?= ${NPROC}
 CMAKE_EXTRA_OPTS ?= ""
 
 .PHONY: default debug clean wipe-build-image mrproper lint lint-fix shell.with-systemd
 default: tests.done
 
+.PHONY: debug
 debug:
-	head -n1 ../../../_distros/${MY_DISTRO}/Dockerfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
+	head -n1 ../../../_distros/${MY_DISTRO}/*erfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
 	@#echo ${MY_DISTRO}
 	@#echo ${ENGINE}
 	@#echo ${FLAVOUR}
@@ -43,18 +46,22 @@ debug:
 	@#echo ${GIT_BRANCH}
 	@#echo ${IMAGE_NAME}
 
-clean:
+.PHONY: clean
+clean: pooled.ci.clean ci.clean
 	rm -f *.done *.tests.FAILED
 
+.PHONY: wipe-build-image
 wipe-build-image:
 	${ENGINE} stop ${CONTAINER_NAME} || true
 	${ENGINE} rm ${CONTAINER_NAME} || true
 	${ENGINE} image rm -f ${BUILD_IMAGE_NAME} || true
-	rm -f build.done
+	rm -f build.done build-*.done
 
+.PHONY: wipe-build-except-externals
 wipe-build-except-externals: wipe-build-image
 	cd cvmfs && git clean -dxf --exclude externals --exclude externals_build* --exclude externals_install*
 
+.PHONY: mrproper
 mrproper:
 	make clean
 	make wipe-build-image
@@ -63,6 +70,7 @@ mrproper:
 	@echo CCACHE IS LEFT INTACT
 
 # TODO try also cvmfs/ci/run_tidy.sh
+.PHONY: lint
 lint: build.done
 	cp ../../../lint "${WORKCOPY_IN_HOST}"/
 	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint
@@ -73,7 +81,7 @@ lint-fix: build.done
 
 builder.image.done:
 	if [[ ${ENGINE} == podman ]] && ! grep -q 'options overlay .*index=off' /etc/modprobe.d/overlay.conf; then echo "With podman, you may see errors like 'overlayfs: failed to verify upper' unless you use 'index=off' option with 'overlay' kernel module, see https://docs.oracle.com/en/operating-systems/uek/6/relnotes6.0/31025483.html"; exit 1; fi
-	head -n1 ../../../_distros/${MY_DISTRO}/Dockerfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
+	head -n1 ../../../_distros/${MY_DISTRO}/*erfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
 	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} inspect "${IMAGE_NAME}" || ${ENGINE} build --network host . --tag "${IMAGE_NAME}"
 	touch $@
 
@@ -291,11 +299,19 @@ tidy-from-to: build.done
 tidy-last-commit:
 	make tidy-from-to
 
+.PHONY: shell-no-cvmfs.with-systemd
+shell-no-cvmfs.with-systemd:
+	${ENGINE} rm -f "${MY_DISTRO}-no-cvmfs-with-systemd" || true
+	${ENGINE} run --rm --detach --pids-limit=-1 --name "${MY_DISTRO}-no-cvmfs-with-systemd" --privileged ${NETWORK} -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${IMAGE_NAME}" /sbin/init
+	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${MY_DISTRO}-no-cvmfs-with-systemd" bash -l
+
+.PHONY: shell.with-systemd
 shell.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
 	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
 
+.PHONY: cmd.with-systemd
 cmd.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
@@ -406,6 +422,7 @@ ci.failures:
 
 .PHONY: pool-teardown
 pool-teardown:
+	touch container-pool/terminate || true
 	cd container-pool \
 		&& for dir in booting available taken; do \
 			pushd $$dir \
@@ -420,7 +437,7 @@ TESTS_LIST ?= tests.list
 ci.done: build.done ${TESTS_LIST}
 	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
 	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
-	SHOULDBE=shuf ORMAYBE=cat cat ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${NPROC} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} bash
+	SHOULDBE=shuf ORMAYBE=cat cat ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
 	ls ci.*.FAILED | wc -l
 	ls ci.*.PASSED | wc -l
 	shopt -s nullglob; tar --force-local -caf ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* ci.*.FAILED ci.*.PASSED pooled.ci.*.done
@@ -439,7 +456,7 @@ pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NETWORK=${NETWORK} \
-		../../../pooled.ci.create-containers "${NPROC}"
+		../../../pooled.ci.create-containers "${POOLSIZE}"
 	touch $@
 
 DATETIME := $(shell date +%F_%T)
@@ -451,8 +468,9 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NPROC=${NPROC} \
+	       POOLSIZE=${POOLSIZE} \
 		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
-	SHOULDBE=shuf ORMAYBE=cat shuf ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${NPROC} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} bash
+	SHOULDBE=shuf ORMAYBE=cat shuf ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
 	@echo
 	ls pooled.ci.*.FAILED | sed -e 's/pooled.ci.//' -e 's/.FAILED//' | tee pooled.ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.ci.*.PASSED | sed -e 's/pooled.ci.//' -e 's/.PASSED//' | tee pooled.ci.passed-tests.list.${DATETIME} | wc -l
@@ -460,20 +478,19 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	uptime > $@ # save loadavg
 	#touch $@
 
+.PHONY: pooled.ci.done-and-toredown
 pooled.ci.done-and-toredown:
 	ENGINE=${ENGINE} \
-	       make pool-teardown pooled.ci.clean ; \
-	       \
 	       ENGINE=${ENGINE} \
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NPROC=${NPROC} \
+	       POOLSIZE=${POOLSIZE} \
 	       TESTS_LIST=${TESTS_LIST} \
-	       make pooled.ci.done; \
-	       \
-	       ENGINE=${ENGINE} \
+	       make pooled.ci.done
+	ENGINE=${ENGINE} \
 	       make pool-teardown
 
 
@@ -482,6 +499,7 @@ ci.sh.done:
 	       CONTAINER_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       NPROC=${NPROC} \
+	       POOLSIZE=${POOLSIZE} \
 	       ../../../../ci.sh
 	touch $@
 

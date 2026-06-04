@@ -56,12 +56,12 @@ launch_one() {
 
 make  ../../../iplocation.mmdb
 pushd container-pool/booting
-#for x in $(seq 1 "$NB_CONTAINERS"); do
-#	launch_one &
-#done
 NB_IN_POOL=$(find .. -type f -printf '%f\n' | wc -l)
 HOW_MANY_MORE=$(( NB_CONTAINERS - NB_IN_POOL ))
 for i in $(seq 1 "$HOW_MANY_MORE"); do
+	if [[ -f ../terminate ]]; then
+		break
+	fi
 	launch_one
 	sleep 1
 done

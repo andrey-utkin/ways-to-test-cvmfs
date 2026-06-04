@@ -41,6 +41,7 @@ while ! incus list --format json $(echo "${VM_NAME}" | sed -e 's/:/: /') | jq --
 
 incus exec "${VM_NAME}" -- bash -euo pipefail -x <<EOF
 while ! (systemctl is-active multi-user.target && ping -c1 -W1 google.com)&>/dev/null; do sleep 1; done
+mkdir -p /etc/udev && echo children_max=1 >> /etc/udev/udev.conf
 echo options overlay index=off > /etc/modprobe.d/overlay.conf
 echo overlay > /etc/modules
 echo overlay > /etc/modules-load.d/overlay.conf
