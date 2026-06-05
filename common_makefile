@@ -59,7 +59,7 @@ wipe-build-image:
 
 .PHONY: wipe-build-except-externals
 wipe-build-except-externals: wipe-build-image
-	cd cvmfs && git clean -dxf --exclude externals --exclude externals_build* --exclude externals_install*
+	cd cvmfs && git clean -dxf --exclude /externals --exclude /externals_build* --exclude /externals_install*
 
 .PHONY: mrproper
 mrproper:
