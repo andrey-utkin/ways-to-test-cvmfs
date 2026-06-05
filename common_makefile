@@ -52,7 +52,7 @@ clean: pooled.ci.clean ci.clean
 
 .PHONY: wipe-build-image
 wipe-build-image:
-	${ENGINE} stop ${CONTAINER_NAME} || true
+	${ENGINE} stop --time 0 ${CONTAINER_NAME} || true
 	${ENGINE} rm ${CONTAINER_NAME} || true
 	${ENGINE} image rm -f ${BUILD_IMAGE_NAME} || true
 	rm -f build.done build-*.done
@@ -102,7 +102,7 @@ CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/u
 build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	mkdir -p cvmfs/build
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
-	${ENGINE} stop "${CONTAINER_NAME}" || true
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
 	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
 	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
@@ -116,7 +116,7 @@ build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	echo ${MY_DISTRO} | grep 'ubuntu\|debian'
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
-	${ENGINE} stop "${CONTAINER_NAME}" || true
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
 	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" /sbin/init
 	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
