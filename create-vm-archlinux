@@ -119,6 +119,6 @@ popd
 
 
 
-incus exec --cwd /usr/local/src/ways-to-test-cvmfs "$VM_NAME" -- bash -l <<EOF
-make --keep-going build.done
-EOF
+#incus exec --cwd /usr/local/src/ways-to-test-cvmfs "$VM_NAME" -- bash -l <<EOF
+#make --keep-going build.done
+#EOF
