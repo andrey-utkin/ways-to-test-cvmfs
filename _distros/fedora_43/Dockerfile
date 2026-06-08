@@ -44,12 +44,14 @@ RUN dnf install -y \
 	libcap-devel \
 	libuuid-devel \
 	make \
+	meson \
 	net-tools \
 	ngrep \
 	openssl \
 	openssl-devel \
 	parallel \
 	patch \
+	patchelf \
 	procps-ng \
 	psmisc \
 	python3 \
@@ -98,6 +100,10 @@ RUN useradd -m -s /bin/bash sftnight
 RUN echo '%sftnight ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 RUN mkdir -p /etc/udev && echo children_max=1 >> /etc/udev/udev.conf
+
+RUN echo user_allow_other >> /etc/fuse.conf
+
+RUN sed -i /etc/autofs.conf -e 's/^#logging.*/logging=debug/'
 
 # We definitely don't need /tmp wiping mid-job
 # Mask because "disable" fails.
