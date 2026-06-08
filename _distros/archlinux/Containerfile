@@ -1,0 +1,115 @@
+FROM archlinux:base-devel-20260531.0.538839
+
+RUN pacman -Suy --needed --noconfirm \
+	acl \
+	apache \
+	attr \
+	autoconf \
+	automake \
+	awk \
+	bc \
+	bind \
+	bzip2 \
+	ccache \
+	clang \
+	clang-tools-extra \
+	cmake \
+	cpio \
+	delve \
+	e2fsprogs \
+	findutils \
+	fuse2 \
+	fuse3 \
+	gcc \
+	gdb \
+	git \
+	go \
+	gtest \
+	gzip \
+	inotify-tools \
+	iproute \
+	jemalloc \
+	jq \
+	libasan \
+	libcap \
+	make \
+	meson \
+	minio-client \
+	net-tools \
+	ngrep \
+	openssl \
+	parallel \
+	patch \
+	patchelf \
+	procps-ng \
+	psmisc \
+	python-a2wsgi \
+	python-pip \
+	python-pylibacl \
+	python-requests \
+	python-setuptools \
+	python-xattr \
+	python3 \
+	rsync \
+	s3cmd \
+	sqlite \
+	strace \
+	sudo \
+	systemd \
+	unzip \
+	valgrind \
+	vim \
+	wget \
+	xfsprogs \
+	zlib \
+	;
+
+# rua install
+RUN \
+	useradd -m -G wheel builder \
+	&& passwd -d builder \
+	&& mkdir -p /tmp/yay-build \
+	&& chown -R builder:builder /tmp/yay-build \
+	&& echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers \
+	&& su - builder -c "git clone https://aur.archlinux.org/yay.git /tmp/yay-build/yay" \
+	&& su - builder -c "cd /tmp/yay-build/yay && makepkg -si --noconfirm" \
+	&& rm -rf /tmp/yay-build \
+	;
+
+RUN sudo -u builder  yay -S --noconfirm \
+	autofs \
+	minio \
+	rr \
+	rsyslog \
+	varnish \
+	;
+
+RUN pip3 install --break-system-packages xattr
+
+RUN \
+	PY_VER=3.14 \
+	&& python3 -m site --user-site | grep -F /root/.local/lib/python$PY_VER/site-packages \
+	&& mkdir -p /root/.local/lib/python$PY_VER/site-packages \
+	&& git clone https://github.com/google/gtest-parallel /root/.local/lib/python$PY_VER/site-packages/gtest-parallel \
+	&& mkdir -p /usr/local/bin \
+	&& ln -sv /root/.local/lib/python$PY_VER/site-packages/gtest-parallel/gtest-parallel /usr/local/bin/
+
+# Create the sftnight user
+RUN useradd -m -s /bin/bash sftnight
+RUN echo '%sftnight ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+RUN mkdir -p /etc/udev && echo children_max=1 >> /etc/udev/udev.conf
+
+RUN echo user_allow_other >> /etc/fuse.conf
+
+RUN sed -i /etc/autofs/autofs.conf -e 's/^#logging.*/logging=debug/'
+
+# We definitely don't need /tmp wiping mid-job
+# Mask because "disable" fails.
+RUN systemctl mask systemd-tmpfiles-clean.timer
+
+# CentOS 9, Almalinux 9, Ubuntu 24.04 containers do just fine without it
+RUN systemctl mask systemd-udevd.service
+
+RUN systemctl mask systemd-firstboot.service
+RUN systemctl mask systemd-networkd-wait-online.service
