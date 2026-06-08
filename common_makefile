@@ -18,7 +18,7 @@ GIT_BRANCH ?= devel
 IMAGE_NAME := cvmfs-autkin:${MY_DISTRO}
 BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-with-build
 PACKAGED_INSTALL_DEB_IMAGE_NAME := ${FLAVOUR}:${MY_DISTRO}-with-deb
-CONTAINER_NAME := ${FLAVOUR}-${MY_DISTRO}
+CONTAINER_NAME ?= ${FLAVOUR}-${MY_DISTRO}
 WORKCOPY_IN_HOST := $(shell readlink -f cvmfs)
 CCACHE_IN_HOST := $(shell readlink -f ../../../ccache)
 CCACHE_IN_CONTAINER := /root/.ccache
@@ -60,6 +60,10 @@ wipe-build-image:
 .PHONY: wipe-build-except-externals
 wipe-build-except-externals: wipe-build-image
 	cd cvmfs && git clean -dxf --exclude /externals --exclude /externals_build* --exclude /externals_install*
+
+.PHONY: wipe-build
+wipe-build: wipe-build-image
+	cd cvmfs && git clean -dxf
 
 .PHONY: mrproper
 mrproper:
@@ -481,7 +485,6 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 .PHONY: pooled.ci.done-and-toredown
 pooled.ci.done-and-toredown:
 	ENGINE=${ENGINE} \
-	       ENGINE=${ENGINE} \
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
