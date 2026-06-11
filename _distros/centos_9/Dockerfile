@@ -108,6 +108,9 @@ RUN echo user_allow_other >> /etc/fuse.conf
 
 RUN sed -i /etc/autofs.conf -e 's/^#logging.*/logging=debug/'
 
+# This is applied to distros which are so restrictive in this filtering that /usr/local/{s,}bin are stripped out from $PATH, causing real inconvenience
+RUN sed -i /etc/sudoers -e 's/Defaults.*secure_path.*/#&/'
+
 # We definitely don't need /tmp wiping mid-job
 # Mask because "disable" fails.
 RUN systemctl mask systemd-tmpfiles-clean.timer
