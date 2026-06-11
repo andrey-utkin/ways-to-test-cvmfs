@@ -41,8 +41,10 @@ RUN dnf install -y \
 	libuuid-devel \
 	libzstd \
 	libzstd-devel \
+	lsof \
 	make \
 	meson \
+	ngrep \
 	openssl \
 	openssl-devel \
 	patch \
@@ -58,6 +60,7 @@ RUN dnf install -y \
 	python3-setuptools \
 	rsync \
 	rsyslog \
+	s3cmd \
 	sqlite \
 	strace \
 	sudo \

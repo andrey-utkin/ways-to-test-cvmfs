@@ -52,6 +52,7 @@ RUN apt install -y \
 	libsqlite3-dev \
 	libssl-dev \
 	libuuid1 \
+	lsof \
 	make \
 	meson \
 	net-tools \

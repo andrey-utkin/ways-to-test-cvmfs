@@ -43,6 +43,7 @@ RUN dnf install -y \
 	libattr-devel \
 	libcap-devel \
 	libuuid-devel \
+	lsof \
 	make \
 	meson \
 	net-tools \

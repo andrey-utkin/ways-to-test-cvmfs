@@ -53,6 +53,7 @@ RUN apt install -y \
 	libuuid1 \
 	libzstd-dev \
 	libzstd1 \
+	lsof \
 	make \
 	meson \
 	net-tools \
