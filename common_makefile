@@ -54,7 +54,7 @@ clean: pooled.ci.clean ci.clean
 wipe-build-image:
 	${ENGINE} stop --time 0 ${CONTAINER_NAME} || true
 	${ENGINE} rm ${CONTAINER_NAME} || true
-	${ENGINE} image rm -f ${BUILD_IMAGE_NAME} || true
+	${ENGINE} image untag ${BUILD_IMAGE_NAME} || true
 	rm -f build.done build-*.done
 
 .PHONY: wipe-build-except-externals
@@ -69,7 +69,7 @@ wipe-build: wipe-build-image
 mrproper:
 	make clean
 	make wipe-build-image
-	${ENGINE} image rm -f ${IMAGE_NAME} || true
+	${ENGINE} image untag ${IMAGE_NAME} || true
 	rm -rf cvmfs
 	@echo CCACHE IS LEFT INTACT
 
