@@ -357,6 +357,17 @@ test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.m
 	# # ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
 	touch $@
 
+ci_s3_integration.done:
+	pushd cvmfs \
+	&& export COMPOSE_FILE=test/common/container/s3-integration/docker-compose.yml \
+	&& ${ENGINE} compose up --build -d \
+	&& ${ENGINE} compose exec -u sftnight -T cvmfs-dev \
+		sudo cvmfs_config setup \
+	&& ${ENGINE} compose exec -u sftnight -T --workdir /home/sftnight/cvmfs/test cvmfs-dev \
+		./run.sh /tmp/cvmfs-s3-test.log -o /tmp/cvmfs-s3-test.log.xunit.xml -p s3 \
+	; ${ENGINE} compose exec cvmfs-dev cat /tmp/cvmfs-s3-test.log > ../$@ \
+	;
+
 deb-ci_ubuntu.sh.done: packaged-install-deb.done
 	make ci_ubuntu.sh.done BUILD_IMAGE_NAME=${PACKAGED_INSTALL_DEB_IMAGE_NAME}
 
