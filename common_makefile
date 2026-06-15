@@ -24,7 +24,6 @@ CCACHE_IN_HOST := $(shell readlink -f ../../../ccache)
 CCACHE_IN_CONTAINER := /root/.ccache
 GO_PKG_MOD_IN_HOST := $(shell readlink -f ../../../go_pkg_mod)
 GO_PKG_MOD_IN_CONTAINER := /root/go/pkg/mod
-LIBDNF5_CACHE_IN_HOST := $(shell readlink -f ../../../var_cache_libdnf5)
 WORKCOPY_IN_CONTAINER := /usr/local/src/cvmfs
 NPROC ?= $(shell nproc)
 #NPROC := 3
@@ -77,11 +76,11 @@ mrproper:
 .PHONY: lint
 lint: build.done
 	cp ../../../lint "${WORKCOPY_IN_HOST}"/
-	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint
 
 lint-fix: build.done
 	cp ../../../lint "${WORKCOPY_IN_HOST}"/
-	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint -fix
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint -fix
 
 builder.image.done:
 	if [[ ${ENGINE} == podman ]] && ! grep -q 'options overlay .*index=off' /etc/modprobe.d/overlay.conf; then echo "With podman, you may see errors like 'overlayfs: failed to verify upper' unless you use 'index=off' option with 'overlay' kernel module, see https://docs.oracle.com/en/operating-systems/uek/6/relnotes6.0/31025483.html"; exit 1; fi
@@ -123,7 +122,7 @@ FRANKEN_BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-franken-${GRAFT_FLAVOUR}
 franken.build.done: build.done
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
-	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 
 	@${ENGINE} exec "${CONTAINER_NAME}" cvmfs_config setup
@@ -332,13 +331,13 @@ tidy-last-commit:
 .PHONY: shell-no-cvmfs.with-systemd
 shell-no-cvmfs.with-systemd:
 	${ENGINE} rm -f "${MY_DISTRO}-no-cvmfs-with-systemd" || true
-	${ENGINE} run --rm --detach --pids-limit=-1 --name "${MY_DISTRO}-no-cvmfs-with-systemd" --privileged ${NETWORK} -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --pids-limit=-1 --name "${MY_DISTRO}-no-cvmfs-with-systemd" --privileged ${NETWORK} -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${MY_DISTRO}-no-cvmfs-with-systemd" bash -l
 
 .PHONY: shell.with-systemd
 shell.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
-	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
 
 .PHONY: frankenshell
@@ -348,7 +347,7 @@ frankenshell: build.done
 .PHONY: cmd.with-systemd
 cmd.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
-	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-with-systemd" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" ${CMD}
 
@@ -367,8 +366,7 @@ test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.m
 	# ${ENGINE} inspect "${CONTAINER_NAME}-$*" | jq --raw-output .[0].State.Status | grep running || ...
 	${ENGINE} rm -f "${CONTAINER_NAME}-$*" || true
 	cp ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
-	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
-	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$*" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --cap-add=MKNOD --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$*" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --cap-add=MKNOD --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} cp ~/.gdbinit ${CONTAINER_NAME}-$*:/root/ || true
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$*" bash -x cvmfs_config setup
@@ -409,8 +407,7 @@ ci_ubuntu.sh.done:
 	# ${ENGINE} inspect "${CONTAINER_NAME}-with-systemd" | jq --raw-output .[0].State.Status | grep running || ...
 	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
 	cp ../../../ci_ubuntu.sh "${WORKCOPY_IN_HOST}"/
-	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
-	${ENGINE} run --detach --name "${CONTAINER_NAME}-$@" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	${ENGINE} run --detach --name "${CONTAINER_NAME}-$@" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	#@${ENGINE} cp ~/.gdbinit ${CONTAINER_NAME}-with-systemd:/root/ || true
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -x cvmfs_config setup
@@ -429,7 +426,6 @@ ci.%.done: build.done cvmfs/test/src/%/main
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       ../../../one-ci-test.sh $* &> $@.wip
 	@mv $@.wip $@
 	@if [[ -f ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
@@ -439,7 +435,6 @@ pooled.ci.%.done: build.done cvmfs/test/src/%/main
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       ../../../pooled.ci.one-test $* &> $@.wip
 	@mv $@.wip $@
 	@if [[ -f pooled.ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
@@ -493,7 +488,6 @@ pool-teardown:
 TESTS_LIST ?= tests.list
 ci.done: build.done ${TESTS_LIST}
 	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
-	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
 	SHOULDBE=shuf ORMAYBE=cat cat ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
 	ls ci.*.FAILED | wc -l
 	ls ci.*.PASSED | wc -l
@@ -503,7 +497,6 @@ ci.done: build.done ${TESTS_LIST}
 pooled.ci.setup: build.done
 	mkdir -p container-pool/{booting,available,taken,failed,dead}
 	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
-	mkdir -p "${LIBDNF5_CACHE_IN_HOST}"
 	touch $@
 
 pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
@@ -511,7 +504,6 @@ pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NETWORK=${NETWORK} \
 		../../../pooled.ci.create-containers "${POOLSIZE}"
 	touch $@
@@ -532,7 +524,6 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
 		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
@@ -552,7 +543,6 @@ pooled.ci.done-and-torndown:
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       LIBDNF5_CACHE_IN_HOST=${LIBDNF5_CACHE_IN_HOST} \
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
 	       TESTS_LIST=${TESTS_LIST} \

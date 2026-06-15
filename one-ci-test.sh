@@ -11,7 +11,7 @@ set -x
 PRIORITIZE=()
 
 CONTAINER_ID=$(
-	"${PRIORITIZE[@]}" ${ENGINE} run --detach --rm --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	"${PRIORITIZE[@]}" ${ENGINE} run --detach --rm --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 )
 cleanup() {
 	"${PRIORITIZE[@]}" ${ENGINE} exec "${CONTAINER_ID}" systemctl poweroff || true

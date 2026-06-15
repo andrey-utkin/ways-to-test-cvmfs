@@ -28,7 +28,6 @@ launch_one() {
 			--security-opt seccomp=unconfined \
 			-v /sys/fs/cgroup:/sys/fs/cgroup \
 			-v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" \
-			-v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 \
 			"${BUILD_IMAGE_NAME}" /sbin/init
 	)
 	touch "$CONTAINER_ID"
