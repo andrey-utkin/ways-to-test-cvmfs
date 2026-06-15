@@ -187,6 +187,7 @@ UNITTESTS_FILTER_DEFAULT := "-*Slow:T_Smalloc.Big*:${UNITTESTS_FAILING}:${UNITTE
 UNITTESTS_FILTER_FAST := "${UNITTESTS_FILTER_DEFAULT}:${UNITTESTS_FAILING_WHEN_NOT_SERIALIZED}:${UNITTESTS_SLOW}"
 
 UNITTESTS_FILTER ?= ${UNITTESTS_FILTER_DEFAULT}
+UNITTESTS_REPEAT ?= 1
 
 #UNITTESTS_FILTER := T_IngestionStress.ProcessEmptyFile
 
@@ -196,21 +197,21 @@ unittests.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT}
 	touch $@
 
 unittests.with-systemd.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}"  "${BUILD_IMAGE_NAME}" /sbin/init
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
-	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp
+	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT}
 
 unittests-rr.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/rr-recording
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
 	mkdir  ${WORKCOPY_IN_HOST}/unittests.out
-	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_break_on_failure
+	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT} --gtest_break_on_failure
 	touch $@
 
 .PHONY: unittests-rr-replay
