@@ -97,6 +97,7 @@ git-fetch-reset: cvmfs/cvmfs/cvmfs.cc
 	cd cvmfs \
 	&& git fetch \
 	&& git stash \
+	&& git checkout ${GIT_BRANCH} \
 	&& git reset --hard origin/${GIT_BRANCH} \
 	;
 
