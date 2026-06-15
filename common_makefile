@@ -327,6 +327,8 @@ cmd.with-systemd: build.done
 ../../../iplocation.mmdb:
 	cd ../../.. && make iplocation.mmdb
 
+KEEP_ON_SUCCESS ?= 0
+KEEP_ON_FAILURE ?= 1
 cvmfs/test/src/%/main: ;
 test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.mmdb
 	# this is how I would go about reusing an already-running container:
@@ -345,6 +347,12 @@ test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.m
 	tar --to-stdout -xaf tests.logs.tar tmp/test.log > $@.wip && mv $@.wip $@ || true
 	zstd --rm -f tests.logs.tar
 	mv tests.logs.tar.zst tests.logs.$(shell date +%F_%T).tar.zst
+	#if [[ ${KEEP} == 0 ]]; then ${ENGINE} stop "${CONTAINER_NAME}-$*"; fi
+	if [[ -f ${CONTAINER_NAME}-$*.tests.FAILED ]]; then \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${ENGINE} stop "${CONTAINER_NAME}-$*"; fi; \
+	else \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${ENGINE} stop "${CONTAINER_NAME}-$*"; fi; \
+	fi
 	if [[ -f ${CONTAINER_NAME}-$*.tests.FAILED ]]; then echo "TESTS FAILED"; exit 1; fi
 	# # ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
 	touch $@
