@@ -131,7 +131,7 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} commit "${CONTAINER_NAME}" "${PACKAGED_INSTALL_DEB_IMAGE_NAME}"
 	touch $@
 
-tests.done: unittests-parallel.done pooled.ci.done-and-toredown
+tests.done: unittests-parallel.done pooled.ci.done-and-torndown
 	touch $@
 
 # if testing upstream way, we need to launch systemd
@@ -503,9 +503,11 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	uptime > $@ # save loadavg
 	#touch $@
 
-.PHONY: pooled.ci.done-and-toredown
-pooled.ci.done-and-toredown:
+.PHONY: pooled.ci.done-and-torndown
+pooled.ci.done-and-torndown:
 	ENGINE=${ENGINE} \
+	       make pool-teardown pooled.ci.clean \
+	&& ENGINE=${ENGINE} \
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
 	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
@@ -513,8 +515,8 @@ pooled.ci.done-and-toredown:
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
 	       TESTS_LIST=${TESTS_LIST} \
-	       make pooled.ci.done
-	ENGINE=${ENGINE} \
+	       make pooled.ci.done \
+	&& ENGINE=${ENGINE} \
 	       make pool-teardown
 
 
