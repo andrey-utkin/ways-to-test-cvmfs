@@ -1,7 +1,7 @@
 # Make each subdir, supporting multiple top-level targets.
 # https://stackoverflow.com/a/17845120
 
-TOPTARGETS := tests.done clean mrproper debug builder.image.done build.done pooled.ci.status pooled.ci.clean pooled.ci.done git-fetch-reset wipe-build-image
+TOPTARGETS := tests.done clean mrproper debug builder.image.done build.done pooled.ci.status pooled.ci.clean pooled.ci.done pool-teardown pooled.ci.done-and-torndown git-fetch-reset wipe-build-image
 
 # Upstream needs systemd to toggle httpd, and systemd breaks my machine in privileged mode
 #SUBDIRS := $(wildcard sth-else/*/*/. upstream/*/*/.)
