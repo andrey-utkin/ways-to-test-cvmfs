@@ -118,6 +118,30 @@ build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
 	touch $@
 
+GRAFT_FLAVOUR ?= 2.11.2
+FRANKEN_BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-franken-${GRAFT_FLAVOUR}
+franken.build.done: build.done
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
+	${ENGINE} rm "${CONTAINER_NAME}" || true
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+
+	@${ENGINE} exec "${CONTAINER_NAME}" cvmfs_config setup
+	@${ENGINE} exec "${CONTAINER_NAME}" bash -c 'echo CVMFS_HTTP_PROXY=DIRECT >> /etc/cvmfs/default.conf'
+	@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs2 ${CONTAINER_NAME}:/usr/bin/
+	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/bin/
+	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/sbin/
+
+	for x in ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/libcvmfs*;  do ${ENGINE} cp $$x ${CONTAINER_NAME}:/usr/lib/; done
+	@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/externals_install/lib/libjemalloc.so.1 ${CONTAINER_NAME}:/usr/lib/ || true
+	@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/externals_install/lib/libfuse3__.so    ${CONTAINER_NAME}:/usr/lib/ || true
+	@${ENGINE} exec "${CONTAINER_NAME}" ldconfig
+
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
+	${ENGINE} commit "${CONTAINER_NAME}" "${FRANKEN_BUILD_IMAGE_NAME}"
+	touch $@
+
+
 packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	echo ${MY_DISTRO} | grep 'ubuntu\|debian'
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
@@ -317,6 +341,10 @@ shell.with-systemd: build.done
 	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${LIBDNF5_CACHE_IN_HOST}":/var/cache/libdnf5 "${BUILD_IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
 
+.PHONY: frankenshell
+frankenshell: build.done
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} shell.with-systemd
+
 .PHONY: cmd.with-systemd
 cmd.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
@@ -330,6 +358,10 @@ cmd.with-systemd: build.done
 KEEP_ON_SUCCESS ?= 0
 KEEP_ON_FAILURE ?= 1
 cvmfs/test/src/%/main: ;
+
+franken.test.%.with-systemd.done:
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} test.$*.with-systemd.done
+
 test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.mmdb
 	# this is how I would go about reusing an already-running container:
 	# ${ENGINE} inspect "${CONTAINER_NAME}-$*" | jq --raw-output .[0].State.Status | grep running || ...
@@ -485,6 +517,15 @@ pooled.ci.pool-boot.done: pooled.ci.setup ../../../iplocation.mmdb
 	touch $@
 
 DATETIME := $(shell date +%F_%T)
+
+franken.pooled.ci.done: franken.build.done
+	BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} \
+		ENGINE=${ENGINE} \
+		WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+		NPROC=${NPROC} \
+		POOLSIZE=${POOLSIZE} \
+		TESTS_LIST=${TESTS_LIST} \
+	make pooled.ci.done
 
 pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	ENGINE=${ENGINE} \
