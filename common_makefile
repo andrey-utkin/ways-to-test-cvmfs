@@ -223,6 +223,20 @@ unittests.done: build.done
 	${ENGINE} run --name "${CONTAINER_NAME}-no-systemd" --privileged --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" build/test/unittests/cvmfs_unittests_debug --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT}
 	touch $@
 
+unittests_mockfuse.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-mockfuse" || true
+	rm -rf ${WORKCOPY_IN_HOST}/unittests_mockfuse.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests_mockfuse.out
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-mockfuse" --privileged --device=/dev/fuse -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests_mockfuse.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" build/test/unittests/cvmfs_unittests_mockfuse --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT}
+	touch $@
+
+unittests_mockfuse-rr.done: build.done
+	rm -rf ${WORKCOPY_IN_HOST}/rr-recording
+	rm -rf ${WORKCOPY_IN_HOST}/unittests_mockfuse.out
+	mkdir  ${WORKCOPY_IN_HOST}/unittests_mockfuse.out
+	${ENGINE} run --rm --name "${CONTAINER_NAME}-mockfuse" --privileged --device=/dev/fuse -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${WORKCOPY_IN_HOST}"/unittests_mockfuse.out:/tmp --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ${UNITTESTS_RR} build/test/unittests/cvmfs_unittests_mockfuse --gtest_shuffle --gtest_filter="${UNITTESTS_FILTER}" --output_dir=/tmp --gtest_repeat=${UNITTESTS_REPEAT}
+	touch $@
+
 unittests.with-systemd.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
 	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --network=private --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}"  "${BUILD_IMAGE_NAME}" /sbin/init
