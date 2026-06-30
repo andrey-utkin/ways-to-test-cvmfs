@@ -561,9 +561,11 @@ pooled.ci.done-and-torndown:
 	       POOLSIZE=${POOLSIZE} \
 	       TESTS_LIST=${TESTS_LIST} \
 	       make pooled.ci.done \
-	&& ENGINE=${ENGINE} \
-	       make pool-teardown
-
+	; ENGINE=${ENGINE} \
+	       make pool-teardown \
+	; ENGINE=${ENGINE} \
+	       make pooled.ci.status \
+	;
 
 ci.sh.done:
 	cd cvmfs && ENGINE=${ENGINE} \
