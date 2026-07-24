@@ -218,6 +218,18 @@ UNITTESTS_REPEAT ?= 1
 
 UNITTESTS_RR := rr record --output-trace-dir ${WORKCOPY_IN_CONTAINER}/rr-recording
 
+.PHONY: git-bisect-run
+git-bisect-run:
+	#make wipe-build # more reliable, but takes much longer to rebuild
+	make wipe-build-image
+	make unittests.done
+
+.PHONY: git-bisect-unittests
+git-bisect-unittests:
+	pushd cvmfs \
+	&& git bisect start cvmfs-2.14.0 cvmfs-2.13.2 \
+	&& git bisect run   make -C .. git-bisect-run
+
 unittests.done: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-no-systemd" || true
 	rm -rf ${WORKCOPY_IN_HOST}/unittests.out
