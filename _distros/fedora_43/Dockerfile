@@ -115,3 +115,6 @@ RUN systemctl disable dnf-makecache.timer
 
 # CentOS 9, Almalinux 9, Ubuntu 24.04 containers do just fine without it
 RUN systemctl mask systemd-udevd.service
+
+# https://github.com/sudo-project/sudo/issues/173
+RUN echo Defaults rlimit_core=default >> /etc/sudoers

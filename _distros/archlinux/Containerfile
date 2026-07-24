@@ -127,3 +127,6 @@ RUN systemctl mask systemd-udevd.service
 
 RUN systemctl mask systemd-firstboot.service
 RUN systemctl mask systemd-networkd-wait-online.service
+
+# https://github.com/sudo-project/sudo/issues/173
+RUN echo Defaults rlimit_core=default >> /etc/sudoers

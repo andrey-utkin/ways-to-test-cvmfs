@@ -117,3 +117,6 @@ RUN systemctl mask systemd-tmpfiles-clean.timer
 
 # We don't need container fetching package repo updates mid-job
 RUN systemctl disable dnf-makecache.timer
+
+# https://github.com/sudo-project/sudo/issues/173
+RUN echo Defaults rlimit_core=default >> /etc/sudoers

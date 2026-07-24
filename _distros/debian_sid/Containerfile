@@ -122,3 +122,6 @@ RUN systemctl mask systemd-tmpfiles-clean.timer
 
 RUN systemctl disable apt-daily.timer
 RUN systemctl disable apt-daily-upgrade.timer
+
+# https://github.com/sudo-project/sudo/issues/173
+RUN echo Defaults rlimit_core=default >> /etc/sudoers
