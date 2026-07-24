@@ -9,6 +9,7 @@ UPUPDIRNAME = $(shell basename $(shell readlink -f ../..))
 MY_DISTRO := ${DIRNAME}
 # docker or podman
 ENGINE := ${UPDIRNAME}
+COMPOSE := ${ENGINE}-compose
 NETWORK ?= $(shell if [[ ${ENGINE} == podman ]]; then echo --network=private; else echo --network=bridge; fi)
 FLAVOUR := ${UPUPDIRNAME}
 LOCAL_GIT_STORE := $(shell readlink -f ../../../cvmfs.git)
@@ -17,6 +18,7 @@ GIT_ORIGIN := ${LOCAL_GIT_STORE}
 GIT_BRANCH ?= devel
 IMAGE_NAME := cvmfs-autkin:${MY_DISTRO}
 BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-with-build
+COMPOSE_PROJECT_NAME ?= ${FLAVOUR}-${MY_DISTRO}
 PACKAGED_INSTALL_DEB_IMAGE_NAME := ${FLAVOUR}:${MY_DISTRO}-with-deb
 CONTAINER_NAME ?= ${FLAVOUR}-${MY_DISTRO}
 WORKCOPY_IN_HOST := $(shell readlink -f cvmfs)
@@ -47,7 +49,7 @@ debug:
 
 .PHONY: clean
 clean: pooled.ci.clean ci.clean
-	rm -f *.done *.tests.FAILED
+	rm -f *.done *.FAILED *.PASSED *.exitcode
 
 .PHONY: wipe-build-image
 wipe-build-image:
@@ -401,17 +403,6 @@ test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.m
 	# # ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
 	touch $@
 
-ci_s3_integration.done:
-	pushd cvmfs \
-	&& export COMPOSE_FILE=test/common/container/s3-integration/docker-compose.yml \
-	&& ${ENGINE} compose up --build -d \
-	&& ${ENGINE} compose exec -u sftnight -T cvmfs-dev \
-		sudo cvmfs_config setup \
-	&& ${ENGINE} compose exec -u sftnight -T --workdir /home/sftnight/cvmfs/test cvmfs-dev \
-		./run.sh /tmp/cvmfs-s3-test.log -o /tmp/cvmfs-s3-test.log.xunit.xml -p s3 \
-	; ${ENGINE} compose exec cvmfs-dev cat /tmp/cvmfs-s3-test.log > ../$@ \
-	;
-
 deb-ci_ubuntu.sh.done: packaged-install-deb.done
 	make ci_ubuntu.sh.done BUILD_IMAGE_NAME=${PACKAGED_INSTALL_DEB_IMAGE_NAME}
 
@@ -434,6 +425,100 @@ ci_ubuntu.sh.done:
 		zstd --rm -f tests.logs.tar; \
 		mv tests.logs.tar.zst tests.logs.$(shell date +%F_%T).tar.zst; \
 		touch $@
+
+s3_test_orig.all.done:
+	pushd cvmfs \
+	&& export COMPOSE_FILE=test/common/container/s3-integration/docker-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} up --build -d \
+	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
+		sudo cvmfs_config setup \
+	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs/test cvmfs-dev \
+		./run.sh /tmp/cvmfs-s3-test.log  -o /tmp/cvmfs-s3-test.log.xunit.xml  -p s3 \
+	; echo $$? > ../$@.exitcode \
+	;
+	test -f $@.exitcode
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/docker-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev cat /tmp/cvmfs-s3-test.log > $@.wip || touch $@.wip
+	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
+	mv $@.wip $@
+	(echo -n 'exit '; cat $@.exitcode) | bash
+
+.PHONY: s3_test_orig.teardown
+s3_test_orig.teardown:
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/docker-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} down -v || true
+	rm s3_test_orig.all.done || true
+
+cvmfs/test/common/container/s3-integration/s3-compose.yml: cvmfs/test/common/container/s3-integration/docker-compose.yml build.done
+	cp $< $@.wip
+	grep 'image: ghcr.io/cvmfs/cvmfs-dev:latest' $@.wip
+	sed -i -e 's#image: ghcr.io/cvmfs/cvmfs-dev:latest#image: ${BUILD_IMAGE_NAME}#' $@.wip
+	sed -i -e 's#^    cvmfs-dev:#&\n        command: /sbin/init#' $@.wip
+	sed -i -e 's#^    cvmfs-dev:#&\n        ulimits:\n          core: -1\n          nproc: -1#' $@.wip
+	mv $@.wip $@
+
+s3_test.setup: build.done cvmfs/test/src/%/main cvmfs/test/common/container/s3-integration/s3-compose.yml
+	pushd cvmfs \
+	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} up -d \
+	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
+		sudo cvmfs_config setup \
+	&& echo 'Defaults rlimit_core=default' | ${COMPOSE} exec -u root     -T cvmfs-dev tee -a /etc/sudoers \
+		 \
+	&& ${COMPOSE} logs > ../$@.wip \
+	;
+	mv $@.wip $@
+
+s3_test.all.done: s3_test.setup
+	cp -a ../../../test.runner.s3-all.bash cvmfs
+	pushd cvmfs \
+	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
+		./test.runner.s3-all.bash \
+	; echo $$? > ../$@.exitcode \
+	;
+	test -f $@.exitcode
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
+	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
+	mv $@.wip $@
+	(echo -n 'exit '; cat $@.exitcode) | bash
+
+s3_test.%.done: cvmfs/test/src/%/main s3_test.setup
+	cp -a ../../../test.runner.s3.bash cvmfs
+	pushd cvmfs \
+	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
+		./test.runner.s3.bash $* \
+	; echo $$? > ../$@.exitcode \
+	;
+	test -f $@.exitcode
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
+	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
+	mv $@.wip $@
+	(echo -n 'exit '; cat $@.exitcode) | bash
+
+.PHONY: s3_test.teardown
+s3_test.teardown: cvmfs/test/common/container/s3-integration/s3-compose.yml
+	export COMPOSE_FILE=$< \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} down -v || true
+	rm s3_test.setup || true
+
+.PHONY: s3_test.status
+s3_test.status: cvmfs/test/common/container/s3-integration/s3-compose.yml
+	export COMPOSE_FILE=$< \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} ps
 
 ci.%.done: build.done cvmfs/test/src/%/main
 	@ENGINE=${ENGINE} \
