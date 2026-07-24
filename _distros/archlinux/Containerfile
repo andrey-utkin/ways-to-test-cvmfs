@@ -77,11 +77,24 @@ RUN \
 	&& rm -rf /tmp/yay-build \
 	;
 
+# rsyslog build fails:
+#
+# configure.ac:60: error: undefined or overquoted macro: AX_IS_RELEASE
+#       If this token and others are legitimate, please use m4_pattern_allow.
+#       See the Autoconf documentation.
+# configure.ac:61: error: undefined or overquoted macro: AX_COMPILER_FLAGS
+# configure.ac:2975: error: undefined or overquoted macro: AX_PROG_JAVAC
+# configure.ac:2976: error: undefined or overquoted macro: AX_PROG_JAVA
+# autoreconf: error: /usr/bin/autoconf failed with exit status: 1
+# ==> ERROR: A failure occurred in build().
+#     Aborting...
+#  -> error making: rsyslog-exit status 4
+#
+#	rsyslog \
 RUN sudo -u builder  yay -S --noconfirm \
 	autofs \
 	minio \
 	rr \
-	rsyslog \
 	varnish \
 	;
 
