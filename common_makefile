@@ -87,7 +87,7 @@ lint-fix: build.done
 builder.image.done:
 	if [[ ${ENGINE} == podman ]] && ! grep -q 'options overlay .*index=off' /etc/modprobe.d/overlay.conf; then echo "With podman, you may see errors like 'overlayfs: failed to verify upper' unless you use 'index=off' option with 'overlay' kernel module, see https://docs.oracle.com/en/operating-systems/uek/6/relnotes6.0/31025483.html"; exit 1; fi
 	[ "${MY_DISTRO}" = archlinux ] || head -n1 ../../../_distros/${MY_DISTRO}/*erfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
-	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} inspect "${IMAGE_NAME}" || ${ENGINE} build --network host . --tag "${IMAGE_NAME}"
+	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} inspect "${IMAGE_NAME}" || ${ENGINE} build --network host . --tag "${IMAGE_NAME}" -f *erfile
 	touch $@
 
 cvmfs/cvmfs/cvmfs.cc:
