@@ -485,13 +485,16 @@ s3_test.setup: build.done cvmfs/test/src/%/main cvmfs/test/common/container/s3-i
 	;
 	mv $@.wip $@
 
-s3_test.all.done: s3_test.setup
-	cp -a ../../../test.runner.s3-all.bash cvmfs
+# This template target serves:
+# s3_test.all.done (runs test.runner.s3-all.bash)
+# s3_test.quick.done (runs test.runner.s3-quick.bash)
+s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.setup
+	cp -a ../../../test.runner.s3-$*.bash cvmfs
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
-		./test.runner.s3-all.bash \
+		./test.runner.s3-$*.bash \
 	; echo $$? > ../$@.exitcode \
 	;
 	test -f $@.exitcode
@@ -501,6 +504,23 @@ s3_test.all.done: s3_test.setup
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv $@.wip $@
 	(echo -n 'exit '; cat $@.exitcode) | bash
+
+#s3_test.all.done: s3_test.setup
+#	cp -a ../../../test.runner.s3-all.bash cvmfs
+#	pushd cvmfs \
+#	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
+#	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+#	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
+#		./test.runner.s3-all.bash \
+#	; echo $$? > ../$@.exitcode \
+#	;
+#	test -f $@.exitcode
+#	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
+#	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+#	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
+#	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
+#	mv $@.wip $@
+#	(echo -n 'exit '; cat $@.exitcode) | bash
 
 s3_test.%.done: cvmfs/test/src/%/main s3_test.setup
 	cp -a ../../../test.runner.s3.bash cvmfs
@@ -531,6 +551,18 @@ s3_test.status: cvmfs/test/common/container/s3-integration/s3-compose.yml
 	export COMPOSE_FILE=$< \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} ps
+
+.PHONY: s3_test.shell
+s3_test.shell: cvmfs/test/common/container/s3-integration/s3-compose.yml
+	export COMPOSE_FILE=$< \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev  bash -l
+
+.PHONY: s3_test.logcat
+s3_test.logcat: cvmfs/test/common/container/s3-integration/s3-compose.yml
+	export COMPOSE_FILE=$< \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev  tail -F /tmp/test.log
 
 ci.%.done: build.done cvmfs/test/src/%/main
 	@ENGINE=${ENGINE} \
