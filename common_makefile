@@ -102,6 +102,15 @@ git-fetch-reset: cvmfs/cvmfs/cvmfs.cc
 	&& git reset --hard origin/${GIT_BRANCH} \
 	;
 
+.PHONY: rr-git-fetch-reset
+rr-git-fetch-reset: rr/CMakeLists.txt
+	cd rr \
+	&& git fetch origin \
+	&& git stash \
+	&& git checkout ${RR_GIT_BRANCH} \
+	&& git reset --hard origin/${RR_GIT_BRANCH} \
+	;
+
 CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
 
@@ -117,6 +126,55 @@ build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
+	touch $@
+
+rr-build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc rr.done ../../../cvmfs2-rr
+	mkdir -p cvmfs/build
+	mkdir -p "${GO_PKG_MOD_IN_HOST}"
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
+	${ENGINE} rm "${CONTAINER_NAME}" || true
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
+	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
+	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DINSTALL_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
+	cp -av rr/build/dist/rr*.rpm cvmfs/
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'dnf install -y ../rr*.rpm'
+	cp ../../../cvmfs2-rr "${WORKCOPY_IN_HOST}"/build
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'mkdir -p /usr/bin/cvmfs2-rr && cp -v /usr/bin/cvmfs2 /usr/bin/cvmfs2-rr/cvmfs2 && cp -v ./cvmfs2-rr /usr/bin/cvmfs2'
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
+	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
+	touch $@
+	touch build.done
+
+#RR_GIT_ORIGIN ?= https://github.com/rr-debugger/rr
+RR_GIT_ORIGIN ?= /usr/local/src/rr.git
+RR_GIT_BRANCH ?= master
+#RR_GIT_BRANCH ?= release
+RR_LOCAL_GIT_STORE ?= /usr/local/src/rr.git
+
+rr/CMakeLists.txt:
+	git clone ${RR_GIT_ORIGIN} --branch ${RR_GIT_BRANCH} --reference-if-able ${RR_LOCAL_GIT_STORE} --dissociate rr
+
+RR_WORKCOPY_IN_HOST := $(shell readlink -f rr)
+RR_WORKCOPY_IN_CONTAINER := /usr/local/src/rr
+#RR_CMAKE_EXTRA_OPTS ?= ${CMAKE_COMPILER_OPTS}
+RR_CMAKE_EXTRA_OPTS ?=
+rr.done: rr/CMakeLists.txt
+	mkdir -p rr/build
+	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
+	${ENGINE} rm "${CONTAINER_NAME}" || true
+	${ENGINE} run --detach --pids-limit=-1 --privileged --name "${CONTAINER_NAME}" -v "${RR_WORKCOPY_IN_HOST}":"${RR_WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
+	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${RR_WORKCOPY_IN_CONTAINER}"
+	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
+	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -G Ninja -Ddisable32bit=ON ${RR_CMAKE_COMPILER_OPTS} ${RR_CMAKE_EXTRA_OPTS}"
+	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 cmake --build . --parallel ${NPROC}'
+	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ninja package'
+	#${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ctest -j${NPROC}' --exclude-regex='^sioc-no-syscallbuf$$' --exclude-regex='^sioc$$'
+	# just build, the outcome is the built binary which can be run inside the cvmfs container!
+	#${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 cmake --parallel ${NPROC} --build . --target install'
+	#${ENGINE} stop --time 0 "${CONTAINER_NAME}"
+	#${ENGINE} commit "${CONTAINER_NAME}" "${RR_BUILD_IMAGE_NAME}"
 	touch $@
 
 GRAFT_FLAVOUR ?= 2.11.2
