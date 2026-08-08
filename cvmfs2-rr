@@ -1,0 +1,49 @@
+#!/bin/bash
+set -euo pipefail
+
+if [[ "$1" == -o ]] && [[ "$2" == parse ]]; then
+	exec /usr/bin/cvmfs2-rr/cvmfs2 "$@"
+fi
+
+T0=$(date +%s)
+TIMESTAMP=$(date +%F_%T --date=@"$T0")
+exec &> /tmp/cvmfs2."$TIMESTAMP".wrapper.log
+set -x
+export _RR_TRACE_DIR=/tmp
+export RR_LOG=all:warn,Task:debug
+export RR_LOG_FILE=/tmp/cvmfs2."$TIMESTAMP".rr.log
+# daemonize ends cvmfs2 process early, not clear why
+#exec rr record /usr/bin/cvmfs2-rr/cvmfs2 "$@"
+mounts_before=$(mktemp)
+mount > "$mounts_before"
+nohup rr record /usr/bin/cvmfs2-rr/cvmfs2 -f "$@" >/tmp/cvmfs2."$TIMESTAMP".out 2>/tmp/cvmfs2."$TIMESTAMP".err &
+CHILD_PID=$!
+
+# wait for outcomes to stabilize:
+# - either child process is gone
+# - or the child process is still there, and there's a new mounts line with "type fuse"
+while true; do
+	T_now=$(date +%s)
+	if [[ "$(( T_now - T0 > 30 ))" == 1 ]]; then
+		# timeout
+		exit 110 # ETIMEDOUT
+	fi
+	if [[ "$(readlink /proc/"$CHILD_PID"/exe)" == /usr/bin/rr ]]; then
+		mounts_after=$(mktemp)
+		mount > "$mounts_after"
+		#(diff -Nrd -U0 "$mounts_before" "$mounts_after") > "$mounts_after".diff || true
+		#(diff -Nrd -U0 "$mounts_before" "$mounts_after") | grep '^+.* type fuse ' > "$mounts_after".grep || true
+		if (diff -Nrd -U0 "$mounts_before" "$mounts_after" || :) | grep '^+.* type fuse '; then
+		#if [[ -s "$mounts_after".grep ]]; then
+			rm "$mounts_before"
+			rm "$mounts_after"
+			# mount accomplished
+			exit 0
+		fi
+		rm "$mounts_after"
+		sleep 1
+	else
+		# child process is gone, failure.
+		exit 10 # ECHLD
+	fi
+done
