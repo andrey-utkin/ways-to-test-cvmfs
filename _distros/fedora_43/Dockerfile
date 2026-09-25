@@ -27,6 +27,7 @@ RUN dnf install -y \
 	fuse3-libs \
 	gcc-c++ \
 	gdb \
+	gdb-gdbserver \
 	git \
 	golang \
 	gtest-devel \
@@ -83,11 +84,6 @@ RUN dnf install -y \
 	;
 RUN pip3 install xattr
 
-RUN wget https://dl.min.io/server/minio/release/linux-amd64/minio.rpm && \
-	dnf install -y minio.rpm && \
-	wget https://dl.min.io/client/mc/release/linux-amd64/mc && \
-	install mc /usr/local/bin/mc
-
 RUN \
 	PY_VER=3.14 \
 	&& python3 -m site --user-site | grep -F /root/.local/lib/python$PY_VER/site-packages \
@@ -118,3 +114,15 @@ RUN systemctl mask systemd-udevd.service
 
 # https://github.com/sudo-project/sudo/issues/173
 RUN echo Defaults rlimit_core=default >> /etc/sudoers
+
+# Make a working build env for rr development
+RUN dnf install -y \
+	capnproto \
+	capnproto-devel \
+	capnproto-libs \
+	libzstd-devel \
+	lldb \
+	python3-pexpect \
+	python3-rpm \
+	rpm-build \
+	;

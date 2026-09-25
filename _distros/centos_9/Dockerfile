@@ -9,6 +9,7 @@ RUN dnf install -y \
 	autoconf \
 	autofs \
 	automake \
+	bc \
 	bind-utils \
 	bzip2 \
 	ccache \
@@ -26,6 +27,7 @@ RUN dnf install -y \
 	fuse3-libs \
 	gcc-c++ \
 	gdb \
+	gdb-gdbserver \
 	git \
 	golang \
 	gzip \
@@ -70,6 +72,7 @@ RUN dnf install -y \
 	systemd \
 	unzip \
 	valgrind \
+	varnish \
 	vim \
 	wget \
 	xfsprogs \
@@ -84,11 +87,6 @@ RUN pip3 install xattr
 # [root@32969d5279d9 /]# ls -l /etc/shadow
 # ---------- 1 root root 440 Jul 18 20:16 /etc/shadow
 RUN chmod u+r /etc/shadow
-
-RUN wget https://dl.min.io/server/minio/release/linux-amd64/minio.rpm && \
-	dnf install -y minio.rpm && \
-	wget https://dl.min.io/client/mc/release/linux-amd64/mc && \
-	install mc /usr/local/bin/mc
 
 RUN \
 	PY_VER=3.9 \
@@ -120,3 +118,15 @@ RUN systemctl disable dnf-makecache.timer
 
 # https://github.com/sudo-project/sudo/issues/173
 RUN echo Defaults rlimit_core=default >> /etc/sudoers
+
+# Make a working build env for rr development
+#	gcc-toolset-15 \
+RUN dnf install -y \
+	capnproto \
+	capnproto-devel \
+	capnproto-libs \
+	lldb \
+	python3-pexpect \
+	python3-rpm \
+	rpm-build \
+	;

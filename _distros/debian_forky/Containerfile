@@ -28,6 +28,7 @@ RUN apt install -y \
 	g++ \
 	gawk \
 	gdb \
+	gdbserver \
 	git \
 	golang \
 	gzip \
@@ -91,11 +92,6 @@ RUN apt install -y \
 	zstd \
 	;
 
-RUN wget https://dl.min.io/server/minio/release/linux-amd64/minio.deb && \
-	dpkg -i minio.deb && \
-	wget https://dl.min.io/client/mc/release/linux-amd64/mc && \
-	install mc /usr/local/bin/mc
-
 RUN \
 	PY_VER=3.13 \
 	&& python3 -m site --user-site | grep -F /root/.local/lib/python$PY_VER/site-packages \
@@ -123,3 +119,12 @@ RUN systemctl disable apt-daily-upgrade.timer
 
 # https://github.com/sudo-project/sudo/issues/173
 RUN echo Defaults rlimit_core=default >> /etc/sudoers
+
+# Make a working build env for rr development
+RUN apt install -y \
+	capnproto \
+	libcapnp-dev \
+	lldb \
+	python3-pexpect \
+	python3-rpm \
+	;

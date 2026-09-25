@@ -27,6 +27,7 @@ RUN apt install -y \
 	g++ \
 	gawk \
 	gdb \
+	gdbserver \
 	git \
 	golang \
 	gzip \
@@ -88,11 +89,6 @@ RUN apt install -y \
 	zlib1g-dev \
 	;
 
-RUN wget https://dl.min.io/server/minio/release/linux-amd64/minio.deb && \
-	dpkg -i minio.deb && \
-	wget https://dl.min.io/client/mc/release/linux-amd64/mc && \
-	install mc /usr/local/bin/mc
-
 RUN \
 	PY_VER=3.12 \
 	&& python3 -m site --user-site | grep -F /root/.local/lib/python$PY_VER/site-packages \
@@ -101,23 +97,21 @@ RUN \
 	&& mkdir -p /usr/local/bin \
 	&& ln -sv /root/.local/lib/python$PY_VER/site-packages/gtest-parallel/gtest-parallel /usr/local/bin/
 
-# igprof-navigator is python 2 and I gave up on it
-#RUN \
-#	apt install -y \
-#	libatomic-ops-dev \
-#	libunwind8 \
-#	libunwind-dev \
-#	;
-#RUN \
-#	cd /usr/local/src \
-#	&& wget https://github.com/igprof/igprof/archive/refs/tags/v5.9.18.tar.gz \
-#	&& tar -xaf v5.9.18.tar.gz \
-#	&& cd igprof-5.9.18 \
-#	&& cmake -D UNWIND_INCLUDE_DIR=/usr/include/x86_64-linux-gnu  . \
-#	&& make install \
-#	;
-
-
+# Use 5.10.0 pre-release rr to work around "unknown madvise" with 5.9.0 on Ubuntu 26.04
+RUN apt install -y \
+	capnproto \
+	libcapnp-dev \
+	libzstd-dev \
+	lldb \
+	python3-pexpect \
+	;
+RUN mkdir -p /usr/local/src/rr-build
+RUN git clone https://github.com/rr-debugger/rr/ --branch release /usr/local/src/rr-build/rr
+RUN cd /usr/local/src/rr-build/rr \
+	&& cmake -G Ninja -Ddisable32bit=ON . \
+	&& cmake --build .  --parallel 4 \
+	&& cmake --build . --target install --parallel 4 \
+	;
 
 # Create the sftnight user
 RUN useradd -m -s /bin/bash sftnight
@@ -138,3 +132,12 @@ RUN systemctl disable apt-daily-upgrade.timer
 
 # https://github.com/sudo-project/sudo/issues/173
 RUN echo Defaults rlimit_core=default >> /etc/sudoers
+
+# Make a working build env for rr development
+RUN apt install -y \
+	capnproto \
+	libcapnp-dev \
+	lldb \
+	python3-pexpect \
+	python3-rpm \
+	;
