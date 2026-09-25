@@ -64,5 +64,21 @@ else
 	mv "$EXEC_LOG" pooled.ci."$1".FAILED
 fi
 
+if [[ -x "${WORKCOPY_IN_CONTAINER}"/build/cvmfs2-rr-replay-all ]]; then
+	REPLAY_LOG=pooled.ci."$1".rr-replay-all.log
+	set +e
+	"${WORKCOPY_IN_CONTAINER}"/build/cvmfs2-rr-replay-all > "$REPLAY_LOG"
+	RC=$?
+	set -e
+	if [[ "$RC" == 0 ]] \
+	then
+		echo $(date '+%F_%T') "$1 rr-replay-all PASSED" | tee -a "$CONT_LOG"
+		mv "$REPLAY_LOG" "$REPLAY_LOG".PASSED
+	else
+		echo $(date '+%F_%T') "$1 rr-replay-all FAILED" | tee -a "$CONT_LOG"
+		mv "$REPLAY_LOG" "$REPLAY_LOG".FAILED
+	fi
+fi
+
 #exit "$RC"
 exit 0
