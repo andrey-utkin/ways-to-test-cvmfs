@@ -18,6 +18,10 @@ cleanup() {
 	# ${ENGINE} stop "${CONTAINER_ID}" || true
 }
 trap cleanup HUP INT TERM EXIT
+while ! "${PRIORITIZE[@]}" ${ENGINE} exec "$CONTAINER_ID" true; do sleep 1; done
+"${PRIORITIZE[@]}" ${ENGINE} exec "$CONTAINER_ID" mkdir -p /var/lib/cvmfs-server/geo
+# PWD is container-pool/booting/
+"${PRIORITIZE[@]}" ${ENGINE} cp ../../../../../iplocation.mmdb "$CONTAINER_ID":/var/lib/cvmfs-server/geo/
 "${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" bash -c 'while ! systemctl status &> /dev/null; do echo -n .; sleep 1; done'
 "${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" bash -x cvmfs_config setup
 #${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" useradd -m sftnight || true
