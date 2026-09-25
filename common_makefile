@@ -11,6 +11,8 @@ MY_DISTRO := ${DIRNAME}
 ENGINE := ${UPDIRNAME}
 COMPOSE := ${ENGINE}-compose
 NETWORK ?= $(shell if [[ ${ENGINE} == podman ]]; then echo --network=private; else echo --network=bridge; fi)
+PKG_FMT ?= $(shell if [[ ${MY_DISTRO} =~ debian ]] || [[ ${MY_DISTRO} =~ ubuntu ]]; then echo DEB; else echo RPM; fi)
+pkg_fmt := $(shell if [[ ${MY_DISTRO} =~ debian ]] || [[ ${MY_DISTRO} =~ ubuntu ]]; then echo deb; else echo rpm; fi)
 FLAVOUR := ${UPUPDIRNAME}
 LOCAL_GIT_STORE := $(shell readlink -f ../../../cvmfs.git)
 GIT_ORIGIN := ${LOCAL_GIT_STORE}
@@ -58,6 +60,11 @@ wipe-build-image:
 	${ENGINE} image untag ${BUILD_IMAGE_NAME} || true
 	rm -f build.done build-*.done
 
+.PHONY: wipe-image-tags
+wipe-image-tags:
+	#${ENGINE} image ls ${FLAVOUR}:${MY_DISTRO}'*' | xargs -I {} printf ${ENGINE} image untag {}
+	${ENGINE} image ls --format="{{.Id}}" ${FLAVOUR}:${MY_DISTRO}'*' | xargs -I {} printf aaaa {}
+
 .PHONY: wipe-build-except-externals
 wipe-build-except-externals: wipe-build-image
 	cd cvmfs && git clean -dxf --exclude /externals --exclude /externals_build* --exclude /externals_install*
@@ -70,7 +77,6 @@ wipe-build: wipe-build-image
 mrproper:
 	make clean
 	make wipe-build-image
-	${ENGINE} image untag ${IMAGE_NAME} || true
 	rm -rf cvmfs
 	@echo CCACHE IS LEFT INTACT
 
@@ -84,19 +90,25 @@ lint-fix: build.done
 	cp ../../../lint "${WORKCOPY_IN_HOST}"/
 	${ENGINE} run --rm --name "${CONTAINER_NAME}-lint" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" --workdir "${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" ./lint -fix
 
+.PHONY: builder.image.remake
+builder.image.remake:
+	# You may want to do OPTS=--no-cache
+	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} build --network host . --tag "${IMAGE_NAME}" -f *erfile ${OPTS}
+	touch builder.image.done
+
 builder.image.done:
 	if [[ ${ENGINE} == podman ]] && ! grep -q 'options overlay .*index=off' /etc/modprobe.d/overlay.conf; then echo "With podman, you may see errors like 'overlayfs: failed to verify upper' unless you use 'index=off' option with 'overlay' kernel module, see https://docs.oracle.com/en/operating-systems/uek/6/relnotes6.0/31025483.html"; exit 1; fi
 	[ "${MY_DISTRO}" = archlinux ] || head -n1 ../../../_distros/${MY_DISTRO}/*erfile | sed s/:/_/ | grep "^FROM .*${MY_DISTRO}$$"
-	cd ../../../_distros/${MY_DISTRO} && ${ENGINE} inspect "${IMAGE_NAME}" || ${ENGINE} build --network host . --tag "${IMAGE_NAME}" -f *erfile
+	${ENGINE} inspect "${IMAGE_NAME}" || ${MAKE} builder.image.remake
 	touch $@
 
 cvmfs/cvmfs/cvmfs.cc:
 	git clone ${GIT_ORIGIN} --branch ${GIT_BRANCH} --reference-if-able ${LOCAL_GIT_STORE} --dissociate cvmfs
 
 .PHONY: git-fetch-reset
-git-fetch-reset: cvmfs/cvmfs/cvmfs.cc
+git-fetch-reset: cvmfs/cvmfs/cvmfs.cc wipe-build-image
 	cd cvmfs \
-	&& git fetch \
+	&& git fetch origin \
 	&& git stash \
 	&& git checkout ${GIT_BRANCH} \
 	&& git reset --hard origin/${GIT_BRANCH} \
@@ -113,7 +125,6 @@ rr-git-fetch-reset: rr/CMakeLists.txt
 
 CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
-
 build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	mkdir -p cvmfs/build
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
@@ -128,24 +139,27 @@ build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
 	touch $@
 
-rr-build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc rr.done ../../../cvmfs2-rr
-	mkdir -p cvmfs/build
-	mkdir -p "${GO_PKG_MOD_IN_HOST}"
+rr.build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc build.done ../../../cvmfs2-rr
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
-	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
-	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
-	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DINSTALL_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
-	cp -av rr/build/dist/rr*.rpm cvmfs/
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'dnf install -y ../rr*.rpm'
+	${ENGINE} tag "${BUILD_IMAGE_NAME}" "${BUILD_IMAGE_NAME}".pre-rr.$(shell date +%F_%H%M%S)
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" sleep inf
+	rm -rf cvmfs/rr*.${pkg_fmt}
+	cp -av rr/build/dist/rr*.${pkg_fmt} cvmfs/ || cp -av ../../../_distros/${MY_DISTRO}/rr*.${pkg_fmt} cvmfs/
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'dnf install -y ../rr*.${pkg_fmt}'
 	cp ../../../cvmfs2-rr "${WORKCOPY_IN_HOST}"/build
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'mkdir -p /usr/bin/cvmfs2-rr && cp -v /usr/bin/cvmfs2 /usr/bin/cvmfs2-rr/cvmfs2 && cp -v ./cvmfs2-rr /usr/bin/cvmfs2'
+	cp ../../../cvmfs2-rr-replay-all "${WORKCOPY_IN_HOST}"/build
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ls -ltrR /usr/bin/cvmfs2*; mkdir -p /usr/bin/cvmfs2-rr && cp -av ./cvmfs2-rr /usr/bin/cvmfs2-rr/cvmfs2-rr && if [[ -L /usr/bin/cvmfs2 ]]; then : ; else mv -v /usr/bin/cvmfs2 /usr/bin/cvmfs2-rr/cvmfs2; ln -sv cvmfs2-rr/cvmfs2-rr /usr/bin/cvmfs2; fi'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  cp -a ./cvmfs2-rr-replay-all /usr/bin
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
+	${ENGINE} tag "${BUILD_IMAGE_NAME}" "${BUILD_IMAGE_NAME}".rr.$(shell date +%F_%H%M%S)
 	touch $@
 	touch build.done
+
+.PHONY: rr.franken.build.done
+rr.franken.build.done: franken.build.done
+	make rr.build.done BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME}
 
 #RR_GIT_ORIGIN ?= https://github.com/rr-debugger/rr
 RR_GIT_ORIGIN ?= /usr/local/src/rr.git
@@ -169,7 +183,9 @@ rr.done: rr/CMakeLists.txt
 	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
 	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -G Ninja -Ddisable32bit=ON ${RR_CMAKE_COMPILER_OPTS} ${RR_CMAKE_EXTRA_OPTS}"
 	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 cmake --build . --parallel ${NPROC}'
-	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ninja package'
+	rm -rf rr/build/dist || true
+	#${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ninja package'
+	${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'cpack --config ./CPackConfig.cmake -G ${PKG_FMT}'
 	#${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'ctest -j${NPROC}' --exclude-regex='^sioc-no-syscallbuf$$' --exclude-regex='^sioc$$'
 	# just build, the outcome is the built binary which can be run inside the cvmfs container!
 	#${ENGINE} exec --workdir "${RR_WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 cmake --parallel ${NPROC} --build . --target install'
@@ -200,7 +216,6 @@ franken.build.done: build.done
 	${ENGINE} commit "${CONTAINER_NAME}" "${FRANKEN_BUILD_IMAGE_NAME}"
 	touch $@
 
-
 packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	echo ${MY_DISTRO} | grep 'ubuntu\|debian'
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
@@ -214,7 +229,26 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} commit "${CONTAINER_NAME}" "${PACKAGED_INSTALL_DEB_IMAGE_NAME}"
 	touch $@
 
-tests.done: unittests-parallel.done pooled.ci.done-and-torndown
+#tests.done: unittests-parallel.done pooled.ci.done-and-torndown
+#tests.done: s3_test.all.done test.902-cvmfs-posix-tools.with-systemd.done test.901-ingestsql.with-systemd.done
+tests.done: build.done
+	make unittests.done
+	make unittests_mockfuse.done
+	#make unittests-rr.done
+	make pooled.ci.done-and-torndown # TODO add rr-replay-all
+	#make s3_test.teardown; make s3_test.901-ingestsql.done
+	#make s3_test.teardown; make s3_test.902-cvmfs-posix-tools.done
+	make s3_test.teardown; make s3_test.quick.done || true
+	#make s3_test.rr-replay-all.done
+	#make s3_test.teardown; make s3_test.all.done
+	make s3_test.teardown
+	touch $@
+WORKCOPY_IN_S3_TEST_CONTAINER := /home/sftnight/cvmfs
+s3_test.rr-replay-all.done:
+	cp ../../../cvmfs2-rr-replay-all "${WORKCOPY_IN_HOST}"/build
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
+	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& ${COMPOSE} exec cvmfs-dev  ${WORKCOPY_IN_S3_TEST_CONTAINER}/build/cvmfs2-rr-replay-all
 	touch $@
 
 # if testing upstream way, we need to launch systemd
@@ -231,8 +265,9 @@ ingestsql-test.with-systemd.done: build.done
 
 # These were found failing for no apparent reason on master on 2026-02-26 (Fedora 43 container inside Archlinux VM)
 #UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.Initv2:T_Libcvmfs.InitFailures:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_TestUtilities.GetParentPid:T_Util.ManagedExecExecuteBinaryDoubleFork
-UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.InitFailures:T_Libcvmfs.Initv2:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_Util.ManagedExecExecuteBinaryDoubleFork
+UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.InitFailures:T_Libcvmfs.Initv2:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_Util.ManagedExecExecuteBinaryDoubleFork:T_ParseRelativeTimespan.CalendarUnitsAreCalendarAware
 UNITTESTS_FLAKY := T_Dns.CaresResolverFinalDot
+#UNITTESTS_FLAKY := "T_Dns.*"
 UNITTESTS_FAILING_WHEN_NOT_SERIALIZED := "T_Download.*:T_IngestionStress.*:T_Uploaders/0.*:T_Util.Lsof"
 UNITTESTS_FAILING_WHEN_PID1 := T_TestUtilities.GetParentPid
 # [1067/1080] T_CatalogManagerClient.LoadByHashNetworkFailure (20273 ms)
@@ -278,14 +313,14 @@ UNITTESTS_RR := rr record --output-trace-dir ${WORKCOPY_IN_CONTAINER}/rr-recordi
 
 .PHONY: git-bisect-run
 git-bisect-run:
-	#make wipe-build # more reliable, but takes much longer to rebuild
-	make wipe-build-image
+	make wipe-build # more reliable, but takes much longer to rebuild
+	#make wipe-build-image
 	make unittests.done
 
 .PHONY: git-bisect-unittests
 git-bisect-unittests:
 	pushd cvmfs \
-	&& git bisect start cvmfs-2.14.0 cvmfs-2.13.2 \
+	&& git bisect start origin/devel cvmfs-2.14.0 \
 	&& git bisect run   make -C .. git-bisect-run
 
 unittests.done: build.done
@@ -424,7 +459,14 @@ shell-no-cvmfs.with-systemd:
 shell.with-systemd: build.done
 	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
 	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
+	#${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${RR_WORKCOPY_IN_HOST}":"${RR_WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
 	${ENGINE} exec -it --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
+
+.PHONY: rr.shell
+rr.shell: rr/CMakeLists.txt
+	${ENGINE} rm -f "${CONTAINER_NAME}-with-systemd" || true
+	${ENGINE} run --rm --detach --pids-limit=-1 --name "${CONTAINER_NAME}-with-systemd" --privileged ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${RR_WORKCOPY_IN_HOST}":"${RR_WORKCOPY_IN_CONTAINER}" "${IMAGE_NAME}" /sbin/init
+	${ENGINE} exec -it --workdir "${RR_WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-with-systemd" bash -l
 
 .PHONY: frankenshell
 frankenshell: build.done
@@ -444,8 +486,21 @@ KEEP_ON_SUCCESS ?= 0
 KEEP_ON_FAILURE ?= 1
 cvmfs/test/src/%/main: ;
 
-franken.test.%.with-systemd.done:
+franken.test.%.with-systemd.done: franken.build.done
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} test.$*.with-systemd.done
+
+franken.s3_test.%.done: franken.build.done
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.done
+
+franken.s3_test.teardown:
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.teardown
+
+franken.%.done: franken.build.done
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*.done
+
+franken.%:
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*
+
 
 test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.mmdb
 	# this is how I would go about reusing an already-running container:
@@ -536,8 +591,7 @@ s3_test.setup: build.done cvmfs/test/src/%/main cvmfs/test/common/container/s3-i
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} up -d \
 	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
-		sudo cvmfs_config setup \
-	&& echo 'Defaults rlimit_core=default' | ${COMPOSE} exec -u root     -T cvmfs-dev tee -a /etc/sudoers \
+		sudo bash -x cvmfs_config setup \
 		 \
 	&& ${COMPOSE} logs > ../$@.wip \
 	;
@@ -552,15 +606,15 @@ s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.setup
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
-		./test.runner.s3-$*.bash \
+		./test.runner.s3-$*.bash | tee $@.out \
 	; echo $$? > ../$@.exitcode \
 	;
 	test -f $@.exitcode
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
-	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
+	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.log || touch $@.log
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
-	mv $@.wip $@
+	mv cvmfs/$@.out $@
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
 #s3_test.all.done: s3_test.setup
@@ -673,6 +727,16 @@ ci.status:
 ci.failures:
 	for test in $(shell ls *.FAILED | cut -d . -f 3); do for tar in *ci.$$test.*zst; do tar --to-stdout -xaf $$tar tmp/test.log; done; done
 
+pooled.ci.rr-replay-all.done:
+	cp ../../../cvmfs2-rr-replay-all "${WORKCOPY_IN_HOST}"/build
+	cd container-pool \
+		&& for dir in booting available taken; do \
+			pushd $$dir \
+			&& (for x in *; do ${ENGINE} exec $$x ${WORKCOPY_IN_CONTAINER}/build/cvmfs2-rr-replay-all >> $@ || touch $@.FAILED; done) \
+			&& popd; \
+		done \
+		;
+
 .PHONY: pool-teardown
 pool-teardown:
 	touch container-pool/terminate || true
@@ -748,7 +812,11 @@ pooled.ci.done-and-torndown:
 	       POOLSIZE=${POOLSIZE} \
 	       TESTS_LIST=${TESTS_LIST} \
 	       make pooled.ci.done \
-	; ENGINE=${ENGINE} \
+	|| true
+	ENGINE=${ENGINE} \
+	       make pooled.ci.rr-replay-all.done \
+	;
+	ENGINE=${ENGINE} \
 	       make pool-teardown \
 	; ENGINE=${ENGINE} \
 	       make pooled.ci.status \
