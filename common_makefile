@@ -204,6 +204,8 @@ franken.build.done: build.done
 	@${ENGINE} exec "${CONTAINER_NAME}" cvmfs_config setup
 	@${ENGINE} exec "${CONTAINER_NAME}" bash -c 'echo CVMFS_HTTP_PROXY=DIRECT >> /etc/cvmfs/default.conf'
 	@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs2 ${CONTAINER_NAME}:/usr/bin/
+	if [[ ${FRANKEN_SWISSKNIFE} != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife       ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ ${FRANKEN_SWISSKNIFE} != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife_debug ${CONTAINER_NAME}:/usr/bin/ ; fi
 	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/bin/
 	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/sbin/
 
@@ -849,3 +851,21 @@ tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
 	fi; \
 	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
 	mv $@.wip $@
+
+OTHER_TESTS_ENV ?= BOGUS=1
+other-tests.done: build.done
+	${ENGINE} rm -f "${CONTAINER_NAME}-$@" || true
+	if [[ '${GRAFTED_TESTS}' != '' ]]; then rsync -av --delete ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/${OTHER_TESTS_SUBDIR} ${WORKCOPY_IN_HOST} ; fi
+	${ENGINE} run --rm --detach --name "${CONTAINER_NAME}-$@" --privileged --pids-limit=-1 ${NETWORK} --device=/dev/fuse --cap-add=SYS_PTRACE --cap-add=MKNOD --tmpfs /cvmfs --tmpfs /var/spool/cvmfs -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" "${BUILD_IMAGE_NAME}" /sbin/init
+	@${ENGINE} cp ~/.gdbinit ${CONTAINER_NAME}-$@:/root/ || true
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
+	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'echo CVMFS_IPV4_ONLY=1 >> /etc/cvmfs/default.conf'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u root --env=${OTHER_TESTS_ENV} "${CONTAINER_NAME}-$@" ./${OTHER_TESTS_SUBDIR}/wtt-runner
+	if [[ -f ${CONTAINER_NAME}-$@.tests.FAILED ]]; then \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${ENGINE} stop "${CONTAINER_NAME}-$@"; fi; \
+	else \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${ENGINE} stop "${CONTAINER_NAME}-$@"; fi; \
+	fi
+	if [[ -f ${CONTAINER_NAME}-$@.tests.FAILED ]]; then echo "TESTS FAILED"; exit 1; fi
+	# # ^-- On tests failure, returns non-zero, but produces the target file. Re-runs will say "nothing to do".
+	touch $@
