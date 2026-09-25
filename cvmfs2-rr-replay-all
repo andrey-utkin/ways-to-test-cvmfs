@@ -1,0 +1,26 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+
+pushd /tmp
+for rec in $(ls -vd cvmfs2-*); do
+	if [[ -e "$rec"/incomplete ]]; then
+		continue
+	fi
+
+	# informative: non-zero exit code processes
+	rr ps "$rec" | tail -n +2 | awk '$3 != 0 { print $0 }'
+
+	rr replay "$rec" -- \
+		-q \
+		-ex 'set pagination off' \
+		-ex 'set confirm off' \
+		-ex 'handle SIG32 ignore' \
+		-ex continue \
+		-ex continue \
+		-ex quit \
+		| tee replay."$rec" \
+	;
+	! grep 'SIGSEGV' replay."$rec"
+	! grep 'SIGABRT' replay."$rec"
+done
