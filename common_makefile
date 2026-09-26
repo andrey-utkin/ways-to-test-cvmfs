@@ -204,8 +204,11 @@ franken.build.done: build.done
 	@${ENGINE} exec "${CONTAINER_NAME}" cvmfs_config setup
 	@${ENGINE} exec "${CONTAINER_NAME}" bash -c 'echo CVMFS_HTTP_PROXY=DIRECT >> /etc/cvmfs/default.conf'
 	@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs2 ${CONTAINER_NAME}:/usr/bin/
-	if [[ ${FRANKEN_SWISSKNIFE} != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife       ${CONTAINER_NAME}:/usr/bin/ ; fi
-	if [[ ${FRANKEN_SWISSKNIFE} != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife_debug ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ '${FRANKEN_SWISSKNIFE}' != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife       ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ '${FRANKEN_SWISSKNIFE}' != '' ]]; then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_swissknife_debug ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ '${FRANKEN_GATEWAY}' != '' ]];   then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/gateway/cvmfs_gateway ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ '${FRANKEN_RECEIVER}' != '' ]];   then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_receiver       ${CONTAINER_NAME}:/usr/bin/ ; fi
+	if [[ '${FRANKEN_RECEIVER}' != '' ]];   then ${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/cvmfs/cvmfs_receiver_debug ${CONTAINER_NAME}:/usr/bin/ ; fi
 	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/bin/
 	#@${ENGINE} cp ../../../${GRAFT_FLAVOUR}/${ENGINE}/${MY_DISTRO}/cvmfs/build/mount/mount.cvmfs ${CONTAINER_NAME}:/usr/sbin/
 
