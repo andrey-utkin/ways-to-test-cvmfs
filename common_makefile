@@ -148,19 +148,24 @@ is-build-up-to-date:
 	cd cvmfs && git fetch origin
 	diff -Nurd build.done.git-hash <(cd cvmfs && git show --format=%H --no-patch origin/${GIT_BRANCH})
 
+MESSAGE_ID ?= $(shell date +%F_%H%M%S.%9N)@$(shell hostnamectl hostname)
+MESSAGE_ID_HEADER := Message-Id: <${MESSAGE_ID}>
+IN_REPLY_TO_HEADER ?=
 REPORT_SUBJECT_LINE ?= ${SUBJECT} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)
 .PHONY: report
 report:
-	echo -e "Subject: ${REPORT_SUBJECT_LINE}" | sendmail root
+	echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
 
 DESCR ?= ${GOALS}
 .PHONY: report-make
 report-make:
-	${MAKE} report SUBJECT="make $${DESCR}"; \
+	# Couldn't get MESSAGE_ID evaluated only once other than by evaluating it in recipe
+	MESSAGE_ID=$(shell date +%F_%H%M%S.%9N)@$(shell hostnamectl hostname); \
+		${MAKE} report SUBJECT="make ${DESCR}" MESSAGE_ID=$${MESSAGE_ID}; \
 		${MAKE} $${GOALS}; \
 		RC=$$?; \
 		if [[ $${RC} == 0 ]]; then OUTCOME='__ok'; else OUTCOME='FAIL'; fi; \
-		${MAKE} report SUBJECT="$${OUTCOME} $${DESCR}"; \
+		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; \
 		exit $${RC}
 
 report-build.done:
