@@ -210,7 +210,7 @@ tests.monitor.make-build:
 
 .PHONY: tests.monitor.wait-for-build
 tests.monitor.wait-for-build:
-	while true; do make tests.update.incremental || exit $$?; sleep 5m; done
+	while true; do if ! [[ -f build.done ]]; then sleep 5m; continue; fi; make tests.update.incremental || exit $$?; sleep 5m; done
 
 rr.build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc build.done ../../../cvmfs2-rr
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
