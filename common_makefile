@@ -204,8 +204,13 @@ tests.update:
 		cat tests.email; \
 		true;
 
-make tests.monitor:
-	while true; do make tests.update.incremental || break; sleep 5m; done
+.PHONY: tests.monitor.make-build
+tests.monitor.make-build:
+	while true; do make build.update.incremental tests.update.incremental || exit $$?; sleep 5m; done
+
+.PHONY: tests.monitor.wait-for-build
+tests.monitor.wait-for-build:
+	while true; do make tests.update.incremental || exit $$?; sleep 5m; done
 
 rr.build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc build.done ../../../cvmfs2-rr
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
