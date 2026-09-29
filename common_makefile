@@ -30,6 +30,7 @@ GO_PKG_MOD_IN_HOST := $(shell readlink -f ../../../go_pkg_mod)
 GO_PKG_MOD_IN_CONTAINER := /root/go/pkg/mod
 WORKCOPY_IN_CONTAINER := /usr/local/src/cvmfs
 NPROC ?= $(shell nproc)
+LOAD ?= ${NPROC}
 #NPROC := 3
 POOLSIZE = 8
 POOLSIZE ?= ${NPROC}
@@ -126,7 +127,7 @@ rr-git-fetch-reset: rr/CMakeLists.txt
 CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
 MAKE_JOBSERVER_DECL := --jobserver-auth=fifo:/tmp/jobserver
-MAKE_JOBSERVER_OPTS := $(shell if [[ ${MY_DISTRO} =~ centos_9|almalinux_8|almalinux_9|ubuntu_24.04 ]]; then echo ""; else echo ${MAKE_JOBSERVER_DECL}; fi)
+BUILD_MAKE_CONCUR_OPTS := $(shell if [[ ${MY_DISTRO} =~ centos_9|almalinux_8|almalinux_9|ubuntu_24.04 ]]; then echo "-j${NPROC} -l${LOAD}"; else echo ${MAKE_JOBSERVER_DECL}; fi)
 build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	mkdir -p cvmfs/build
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
@@ -137,7 +138,7 @@ build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
 	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
 	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make  install V=1 VERBOSE=1 ${MAKE_JOBSERVER_OPTS}'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make  install V=1 VERBOSE=1 ${BUILD_MAKE_CONCUR_OPTS}'
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
 	(cd cvmfs && git show --format=%H --no-patch HEAD) > $@.git-hash
