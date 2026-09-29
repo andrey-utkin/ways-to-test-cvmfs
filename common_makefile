@@ -15,7 +15,7 @@ PKG_FMT ?= $(shell if [[ ${MY_DISTRO} =~ debian ]] || [[ ${MY_DISTRO} =~ ubuntu 
 pkg_fmt := $(shell if [[ ${MY_DISTRO} =~ debian ]] || [[ ${MY_DISTRO} =~ ubuntu ]]; then echo deb; else echo rpm; fi)
 FLAVOUR := ${UPUPDIRNAME}
 LOCAL_GIT_STORE := $(shell readlink -f ../../../cvmfs.git)
-GIT_ORIGIN := ${LOCAL_GIT_STORE}
+GIT_ORIGIN ?= ${LOCAL_GIT_STORE}
 #GIT_ORIGIN := https://github.com/cvmfs/cvmfs.git
 GIT_BRANCH ?= devel
 IMAGE_NAME := cvmfs-autkin:${MY_DISTRO}
@@ -125,19 +125,81 @@ rr-git-fetch-reset: rr/CMakeLists.txt
 
 CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_COMPILER=/usr/bin/clang++
 #CMAKE_COMPILER_OPTS ?= -DCMAKE_C_COMPILER=/usr/bin/gcc   -DCMAKE_CXX_COMPILER=/usr/bin/g++
+MAKE_JOBSERVER_DECL := --jobserver-auth=fifo:/tmp/jobserver
+MAKE_JOBSERVER_OPTS := $(shell if [[ ${MY_DISTRO} =~ centos_9|almalinux_8|almalinux_9|ubuntu_24.04 ]]; then echo ""; else echo ${MAKE_JOBSERVER_DECL}; fi)
 build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 	mkdir -p cvmfs/build
 	mkdir -p "${GO_PKG_MOD_IN_HOST}"
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
-	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" "${IMAGE_NAME}" sleep inf
+	JOBSERVER_PATH=$$(printf %s "${MAKEFLAGS}" | grep -o '[-]-jobserver-auth=fifo:[/]tmp[/]GMfifo[0-9]\+' | cut -d : -f 2); if [[ $${JOBSERVER_PATH} != "" ]]; then ln -snvf $${JOBSERVER_PATH} jobserver; else ln -snvf /dev/null jobserver; fi
+	${ENGINE} run --detach --pids-limit=-1 --name "${CONTAINER_NAME}" -v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" -v "${CCACHE_IN_HOST}":"${CCACHE_IN_CONTAINER}" -v "${GO_PKG_MOD_IN_HOST}":"${GO_PKG_MOD_IN_CONTAINER}" -v ./jobserver:/tmp/jobserver "${IMAGE_NAME}" sleep inf
 	${ENGINE} exec "${CONTAINER_NAME}" git config --global --add safe.directory "${WORKCOPY_IN_CONTAINER}"
 	# "bash -l" to pick up ccache dir into PATH and use it in externals builds
 	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -l -c "cmake  .. -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug -DBUILD_GEOAPI=no  -DBUILD_SERVER=yes -DBUILD_SERVER_DEBUG=yes -DBUILD_LIBCVMFS=yes -DBUILD_LIBCVMFS_CACHE=yes -DBUILD_SHRINKWRAP=yes -DBUILD_DUCC=no  -DBUILD_RECEIVER=yes -DBUILD_RECEIVER_DEBUG=yes -DBUILD_ZLIB_NG=ON -DCFLAGS="-DCVMFS_SUPPRESS_ASSERTS=1" -DBUILD_UNITTESTS=ON -DBUILD_UNITTESTS_DEBUG=ON -DBUILD_GATEWAY=yes ${CMAKE_COMPILER_OPTS} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_INSTALL_PREFIX:PATH=/usr  -DBUILD_UBENCHMARKS=no -DBUILD_STRESS_TESTS=yes -DBUILD_DOCUMENTATION=no -DBUILD_QC_TESTS=no -DBUILD_COVERAGE=no -DENABLE_ASAN=no -DBUILD_SNAPSHOTTER=yes -DBUILD_POSIX_TOOLS=yes ${CMAKE_EXTRA_OPTS}"
-	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make --jobs=${NPROC} install V=1 VERBOSE=1'
+	${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}"/build "${CONTAINER_NAME}"  bash -c 'V=1 VERBOSE=1 make  install V=1 VERBOSE=1 ${MAKE_JOBSERVER_OPTS}'
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}"
 	${ENGINE} commit "${CONTAINER_NAME}" "${BUILD_IMAGE_NAME}"
+	(cd cvmfs && git show --format=%H --no-patch HEAD) > $@.git-hash
 	touch $@
+
+.PHONY: is-build-up-to-date
+is-build-up-to-date:
+	cd cvmfs && git fetch origin
+	diff -Nurd build.done.git-hash <(cd cvmfs && git show --format=%H --no-patch origin/${GIT_BRANCH})
+
+REPORT_SUBJECT_LINE ?= ${SUBJECT} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)
+.PHONY: report
+report:
+	echo -e "Subject: ${REPORT_SUBJECT_LINE}" | sendmail root
+
+DESCR ?= ${GOALS}
+.PHONY: report-make
+report-make:
+	${MAKE} report SUBJECT="make $${DESCR}"; \
+		${MAKE} $${GOALS}; \
+		RC=$$?; \
+		if [[ $${RC} == 0 ]]; then OUTCOME='__ok'; else OUTCOME='FAIL'; fi; \
+		${MAKE} report SUBJECT="$${OUTCOME} $${DESCR}"; \
+		exit $${RC}
+
+report-build.done:
+	HASH=$$(cd cvmfs && git show --format=%h --no-patch HEAD); \
+	     GOALS=build.done DESCR="build $${HASH}" ${MAKE} report-make
+
+.PHONY: build.update.clean
+build.update.clean:
+	${MAKE} is-build-up-to-date || (${MAKE} git-fetch-reset wipe-build       && ${MAKE} report-build.done)
+
+.PHONY: build.update.incremental
+build.update.incremental:
+	${MAKE} is-build-up-to-date || (${MAKE} git-fetch-reset wipe-build-image && ${MAKE} report-build.done)
+
+.PHONY: is-testing-up-to-date
+is-testing-up-to-date:
+	diff -Nurd tests.done.git-hash build.done.git-hash
+
+.PHONY: tests.update.clean
+tests.update.clean: build.update.clean
+	${MAKE} tests.update
+
+.PHONY: tests.update.incremental
+tests.update.incremental: build.update.incremental
+	${MAKE} tests.update
+
+.PHONY: tests.update
+tests.update:
+	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done)
+	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done | tee /dev/stdout | zstd --ultra -T0 -20 > $@.zst; echo "Subject: e=$${PIPESTATUS[0]} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)" | sendmail root)
+	${MAKE} is-testing-up-to-date && exit 0; \
+		${MAKE} clean || exit $$?; \
+		${MAKE} tests.done; \
+		${MAKE} tests.email; \
+		cat tests.email; \
+		true;
+
+make tests.monitor:
+	while true; do make tests.update.incremental || exit $$?; sleep 5m; done
 
 rr.build.done: builder.image.done cvmfs/cvmfs/cvmfs.cc build.done ../../../cvmfs2-rr
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
@@ -247,7 +309,27 @@ tests.done: build.done
 	#make s3_test.rr-replay-all.done
 	#make s3_test.teardown; make s3_test.all.done
 	make s3_test.teardown
+	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
+
+tests.email: tests.email.draft
+	cp -a $< $@.wip
+	sendmail root < $@.wip
+	mv $@.wip $@
+
+tests.email.draft: s3_test.quick.done pooled.ci.done
+	> $@.wip
+	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
+	echo >> $@.wip
+	(cd cvmfs && git show --no-patch HEAD) >> $@.wip
+	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
+	echo s3_test.quick.done >> $@.wip
+	cat  s3_test.quick.done >> $@.wip || true
+	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
+	echo pooled.ci.status >> $@.wip
+	make pooled.ci.status >> $@.wip || true
+	mv $@.wip $@
+
 WORKCOPY_IN_S3_TEST_CONTAINER := /home/sftnight/cvmfs
 s3_test.rr-replay-all.done:
 	cp ../../../cvmfs2-rr-replay-all "${WORKCOPY_IN_HOST}"/build
@@ -605,7 +687,8 @@ s3_test.setup: build.done cvmfs/test/src/%/main cvmfs/test/common/container/s3-i
 # This template target serves:
 # s3_test.all.done (runs test.runner.s3-all.bash)
 # s3_test.quick.done (runs test.runner.s3-quick.bash)
-s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.setup
+s3_test.%.done: ../../../test.runner.s3-%.bash
+	make s3_test.setup
 	cp -a ../../../test.runner.s3-$*.bash cvmfs
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
@@ -622,24 +705,8 @@ s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.setup
 	mv cvmfs/$@.out $@
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
-#s3_test.all.done: s3_test.setup
-#	cp -a ../../../test.runner.s3-all.bash cvmfs
-#	pushd cvmfs \
-#	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
-#	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
-#	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
-#		./test.runner.s3-all.bash \
-#	; echo $$? > ../$@.exitcode \
-#	;
-#	test -f $@.exitcode
-#	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
-#	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
-#	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
-#	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
-#	mv $@.wip $@
-#	(echo -n 'exit '; cat $@.exitcode) | bash
-
-s3_test.%.done: cvmfs/test/src/%/main s3_test.setup
+s3_test.%.done: cvmfs/test/src/%/main
+	make s3_test.setup
 	cp -a ../../../test.runner.s3.bash cvmfs
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
