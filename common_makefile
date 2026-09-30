@@ -213,9 +213,7 @@ tests.update.incremental: build.update.incremental
 	${MAKE} tests.update
 
 .PHONY: tests.update
-tests.update:
-	${MAKE} is-build-up-to-date && exit 0; \
-	${MAKE} git-fetch-reset; \
+tests.update: build.update
 	${MAKE} is-testing-up-to-date && exit 0; \
 	set -e; \
 	rm -f tests.done; \
