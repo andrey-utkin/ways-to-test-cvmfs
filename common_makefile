@@ -222,6 +222,16 @@ tests.update:
 	cat tests.email; \
 	:
 
+.PHONY: tests.update.or-run-anyway
+tests.update.or-rerun:
+	if ! ${MAKE} is-build-up-to-date; then ${MAKE} git-fetch-reset; fi
+	set -e; \
+	rm -f tests.done; \
+	${MAKE} tests.done; \
+	${MAKE} tests.email; \
+	cat tests.email; \
+	:
+
 make tests.monitor:
 	while true; do make tests.update.incremental || exit $$?; sleep 5m; done
 

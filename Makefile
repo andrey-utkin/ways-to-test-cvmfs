@@ -1,7 +1,7 @@
 # Make each subdir, supporting multiple top-level targets.
 # https://stackoverflow.com/a/17845120
 
-TOPTARGETS := tests.done unittests.done clean mrproper debug builder.image.done builder.image.remake build.done pooled.ci.status pooled.ci.clean pooled.ci.done pool-teardown pooled.ci.done-and-torndown git-fetch-reset wipe-build wipe-build-image wipe-build-except-externals s3_test.teardown rr.done rr.build.done build.update build.update.clean build.update.incremental tests.update.incremental tests.update tests.update.clean report-build.done report-make report
+TOPTARGETS := tests.done unittests.done clean mrproper debug builder.image.done builder.image.remake build.done pooled.ci.status pooled.ci.clean pooled.ci.done pool-teardown pooled.ci.done-and-torndown git-fetch-reset wipe-build wipe-build-image wipe-build-except-externals s3_test.teardown rr.done rr.build.done build.update build.update.clean build.update.incremental tests.update tests.update.or-rerun report-build.done report-make report
 
 SUBDIRS_VANILLA := $(wildcard vanilla/*/*/)
 SUBDIRS_TESTABILITY := $(wildcard testability/*/*/)
@@ -54,10 +54,13 @@ tmux-panes-vanilla:
 tmux-panes-testability:
 	make tmux-panes SUBDIRS="${SUBDIRS_TESTABILITY}"
 
+TESTS_MONITOR_LOOP_GOAL ?= tests.update
+#TESTS_MONITOR_LOOP_GOAL ?= tests.update.or-rerun
+
 .PHONY: tests.monitor
 tests.monitor:
 	export SUBDIRS BUILD_UPDATE_POLICY; \
-	while true; do make tests.update; sleep 5m; done
+	while true; do make ${TESTS_MONITOR_LOOP_GOAL}; sleep 5m; done
 
 .PHONY: tests.monitor.vanilla
 tests.monitor.vanilla:
