@@ -212,14 +212,13 @@ tests.update.incremental: build.update.incremental
 
 .PHONY: tests.update
 tests.update:
-	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done)
-	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done | tee /dev/stdout | zstd --ultra -T0 -20 > $@.zst; echo "Subject: e=$${PIPESTATUS[0]} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)" | sendmail root)
 	${MAKE} is-testing-up-to-date && exit 0; \
-		rm tests.done || exit $$?; \
-		${MAKE} tests.done; \
-		${MAKE} tests.email; \
-		cat tests.email; \
-		true;
+	set -e; \
+	rm tests.done; \
+	${MAKE} tests.done; \
+	${MAKE} tests.email; \
+	cat tests.email; \
+	:
 
 make tests.monitor:
 	while true; do make tests.update.incremental || exit $$?; sleep 5m; done
