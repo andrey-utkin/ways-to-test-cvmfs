@@ -60,6 +60,7 @@ TESTS_MONITOR_LOOP_GOAL ?= tests.update
 .PHONY: tests.monitor
 tests.monitor:
 	export SUBDIRS BUILD_UPDATE_POLICY; \
+	set -e; \
 	while true; do ${MAKE} ${TESTS_MONITOR_LOOP_GOAL}; sleep 5m; done
 
 .PHONY: tests.monitor.vanilla
