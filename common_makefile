@@ -320,7 +320,7 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 #tests.done: unittests-parallel.done pooled.ci.done-and-torndown
 #tests.done: s3_test.all.done test.902-cvmfs-posix-tools.with-systemd.done test.901-ingestsql.with-systemd.done
 tests.done: build.done
-	make unittests.done
+	make unittests-parallel.done
 	make unittests_mockfuse.done
 	#make unittests-rr.done
 	make pooled.ci.done-and-torndown # TODO add rr-replay-all
