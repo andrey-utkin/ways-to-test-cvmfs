@@ -216,7 +216,7 @@ tests.update:
 	${MAKE} git-fetch-reset; \
 	${MAKE} is-testing-up-to-date && exit 0; \
 	set -e; \
-	rm tests.done; \
+	rm -f tests.done; \
 	${MAKE} tests.done; \
 	${MAKE} tests.email; \
 	cat tests.email; \
