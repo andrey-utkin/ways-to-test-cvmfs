@@ -173,6 +173,21 @@ report-build.done:
 	HASH=$$(cd cvmfs && git show --format=%h --no-patch HEAD); \
 	     GOALS=build.done DESCR="build $${HASH}" ${MAKE} report-make
 
+# incremental, clean, both
+BUILD_UPDATE_POLICY ?= incremental
+
+.PHONY: build.update
+build.update:
+	set -euo pipefail; \
+	${MAKE} is-build-up-to-date && exit 0; \
+	${MAKE} git-fetch-reset; \
+	${MAKE} wipe-build-image; \
+	if   [[ "${BUILD_UPDATE_POLICY}" == incremental ]]; then                                                    ${MAKE} report-build.done; \
+	elif [[ "${BUILD_UPDATE_POLICY}" == clean       ]]; then                              ${MAKE} wipe-build && ${MAKE} report-build.done; \
+	elif [[ "${BUILD_UPDATE_POLICY}" == both        ]]; then ${MAKE} report-build.done && ${MAKE} wipe-build && ${MAKE} report-build.done; \
+	else echo "Invalid BUILD_UPDATE_POLICY value ${BUILD_UPDATE_POLICY}"; exit 1; fi; \
+	true ;
+
 .PHONY: build.update.clean
 build.update.clean:
 	${MAKE} is-build-up-to-date || (${MAKE} git-fetch-reset wipe-build       && ${MAKE} report-build.done)
