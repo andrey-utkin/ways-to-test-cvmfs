@@ -32,7 +32,7 @@ WORKCOPY_IN_CONTAINER := /usr/local/src/cvmfs
 NPROC ?= $(shell nproc)
 LOAD ?= ${NPROC}
 #NPROC := 3
-POOLSIZE = 8
+#POOLSIZE = 8
 POOLSIZE ?= ${NPROC}
 CMAKE_EXTRA_OPTS ?= ""
 
