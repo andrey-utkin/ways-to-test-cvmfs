@@ -60,17 +60,17 @@ TESTS_MONITOR_LOOP_GOAL ?= tests.update
 .PHONY: tests.monitor
 tests.monitor:
 	export SUBDIRS BUILD_UPDATE_POLICY; \
-	while true; do make ${TESTS_MONITOR_LOOP_GOAL}; sleep 5m; done
+	while true; do ${MAKE} ${TESTS_MONITOR_LOOP_GOAL}; sleep 5m; done
 
 .PHONY: tests.monitor.vanilla
 tests.monitor.vanilla:
 	export BUILD_UPDATE_POLICY SUBDIRS="${SUBDIRS_VANILLA}"; \
-		make tests.monitor
+		${MAKE} tests.monitor
 
 .PHONY: tests.monitor.testability
 tests.monitor.testability:
 	export BUILD_UPDATE_POLICY SUBDIRS="${SUBDIRS_TESTABILITY}"; \
-		make tests.monitor
+		${MAKE} tests.monitor
 
 echo-make:
 	env | grep -i make
