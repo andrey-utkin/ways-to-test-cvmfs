@@ -113,7 +113,9 @@ git-fetch-reset: cvmfs/cvmfs/cvmfs.cc wipe-build-image
 	&& git stash \
 	&& git checkout ${GIT_BRANCH} \
 	&& git reset --hard origin/${GIT_BRANCH} \
+	&& touch cvmfs/cvmfs.cc \
 	;
+	# we end by touching cvmfs/cvmfs/cvmfs.cc because it's tracked as dependency on source code in testing targets
 
 .PHONY: rr-git-fetch-reset
 rr-git-fetch-reset: rr/CMakeLists.txt
@@ -213,7 +215,7 @@ tests.update:
 	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done)
 	#${MAKE} is-testing-up-to-date || (${MAKE} clean && ${MAKE} tests.done | tee /dev/stdout | zstd --ultra -T0 -20 > $@.zst; echo "Subject: e=$${PIPESTATUS[0]} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)" | sendmail root)
 	${MAKE} is-testing-up-to-date && exit 0; \
-		${MAKE} clean || exit $$?; \
+		rm tests.done || exit $$?; \
 		${MAKE} tests.done; \
 		${MAKE} tests.email; \
 		cat tests.email; \
