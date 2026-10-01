@@ -342,8 +342,8 @@ tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done-and-t
 .PHONY: tests.clean
 tests.clean:
 	rm -f tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test*.done tests.email tests.email.draft
-	${MAKE} pool-teardown
-	${MAKE} s3_test.teardown
+	${MAKE} pool-teardown || true
+	${MAKE} s3_test.teardown || true
 
 tests.email: tests.email.draft
 	cp -a $< $@.wip
