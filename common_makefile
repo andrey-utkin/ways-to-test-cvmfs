@@ -213,7 +213,9 @@ tests.update.incremental: build.update.incremental
 	${MAKE} tests.update
 
 .PHONY: tests.update
-tests.update: build.update
+tests.update:
+	if ! [[ $${MAKEFLAGS} =~ -j ]]; then echo "Set concurrency parameters! --jobs (-j), --load-average (-l)."; export NPROC=${NPROC} LOAD=${LOAD}; fi; \
+	${MAKE} build.update; \
 	${MAKE} is-testing-up-to-date && exit 0; \
 	set -e; \
 	rm -f tests.done; \
