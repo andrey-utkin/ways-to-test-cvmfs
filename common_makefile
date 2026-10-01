@@ -341,7 +341,7 @@ tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done-and-t
 
 .PHONY: tests.clean
 tests.clean:
-	rm -f tests.done tests.done.git-hash unittests*.done pooled.ci.done ci.done s3_test*.done tests.email
+	rm -f tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test*.done tests.email tests.email.draft
 	${MAKE} pool-teardown
 	${MAKE} s3_test.teardown
 
@@ -359,8 +359,8 @@ tests.email.draft: s3_test.quick.done pooled.ci.done
 	echo s3_test.quick.done >> $@.wip
 	cat  s3_test.quick.done >> $@.wip || true
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
-	echo pooled.ci.status >> $@.wip
-	make pooled.ci.status >> $@.wip || true
+	echo pooled.ci.done.status >> $@.wip
+	cat  pooled.ci.done status >> $@.wip || true
 	mv $@.wip $@
 
 WORKCOPY_IN_S3_TEST_CONTAINER := /home/sftnight/cvmfs
@@ -924,7 +924,7 @@ pooled.ci.done-and-torndown: build.done
 	ENGINE=${ENGINE} \
 	       make pool-teardown \
 	; ENGINE=${ENGINE} \
-	       make pooled.ci.status \
+	       make pooled.ci.status | tee pooled.ci.done.status \
 	;
 
 .PHONY: s3_test.%.done-and-torndown
