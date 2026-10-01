@@ -952,9 +952,9 @@ s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
 	       TESTS_LIST=${TESTS_LIST} \
 	       ${MAKE} s3_test.$*.done \
 	|| true
-	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.rr-replay-all.done \
-	;
+	#ENGINE=${ENGINE} \
+	#       ${MAKE} s3_test.rr-replay-all.done \
+	#;
 	ENGINE=${ENGINE} \
 	       ${MAKE} s3_test.teardown \
 	;
