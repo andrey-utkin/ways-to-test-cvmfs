@@ -834,26 +834,34 @@ ci.failures:
 
 pooled.ci.rr-replay-all.done:
 	cp ../../../cvmfs2-rr-replay-all "${WORKCOPY_IN_HOST}"/build
-	cd container-pool \
-		&& for dir in booting available taken; do \
-			pushd $$dir \
-			&& (for x in *; do ${ENGINE} exec $$x ${WORKCOPY_IN_CONTAINER}/build/cvmfs2-rr-replay-all >> $@ || touch $@.FAILED; done) \
-			&& popd; \
-		done \
-		;
+	set -x; \
+	set -e; \
+	cd container-pool || exit 0; \
+	for dir in booting available taken; do \
+		pushd $${dir}; \
+		for x in *; do \
+			echo -n $${x} | grep '^[0-9a-f]\{64\}$$'; \
+			${ENGINE} exec $$x ${WORKCOPY_IN_CONTAINER}/build/cvmfs2-rr-replay-all >> ../../$@ || touch ../../$@.FAILED; \
+		done; \
+		popd; \
+	done
 
 .PHONY: pool-teardown
 pool-teardown:
-	touch container-pool/terminate || true
-	cd container-pool \
-		&& for dir in booting available taken; do \
-			pushd $$dir \
-			&& (for x in *; do ${ENGINE} stop --time 0 $$x || true; done) \
-			&& popd; \
-		done \
-		|| true
-	rm -rf container-pool
 	rm -f pooled.ci.pool-boot.done
+	set -x; \
+	set -e; \
+	cd container-pool || exit 0; \
+	touch terminate; \
+	for dir in booting available taken; do \
+		pushd $${dir}; \
+		for x in *; do \
+			echo -n $${x} | grep '^[0-9a-f]\{64\}$$'; \
+			${ENGINE} stop --time 0 $$x || true; \
+		done; \
+		popd; \
+	done
+	rm -rf container-pool
 
 TESTS_LIST ?= tests.list
 ci.done: build.done ${TESTS_LIST}
