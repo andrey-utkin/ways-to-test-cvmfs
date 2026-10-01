@@ -334,19 +334,16 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 
 #tests.done: unittests-parallel.done pooled.ci.done-and-torndown
 #tests.done: s3_test.all.done test.902-cvmfs-posix-tools.with-systemd.done test.901-ingestsql.with-systemd.done
-tests.done: build.done
-	make unittests-parallel.done
-	make unittests_mockfuse.done
-	#make unittests-rr.done
-	make pooled.ci.done-and-torndown # TODO add rr-replay-all
-	#make s3_test.teardown; make s3_test.901-ingestsql.done
-	#make s3_test.teardown; make s3_test.902-cvmfs-posix-tools.done
-	make s3_test.teardown; make s3_test.quick.done || true
-	#make s3_test.rr-replay-all.done
-	#make s3_test.teardown; make s3_test.all.done
-	make s3_test.teardown
+# tests.done: s3_test.all.done-and-torndown
+tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done-and-torndown s3_test.quick.done-and-torndown
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
+
+.PHONY: tests.clean
+tests.clean:
+	rm -f tests.done tests.done.git-hash unittests*.done pooled.ci.done ci.done s3_test*.done tests.email
+	${MAKE} pool-teardown
+	${MAKE} s3_test.teardown
 
 tests.email: tests.email.draft
 	cp -a $< $@.wip
@@ -909,7 +906,7 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	#touch $@
 
 .PHONY: pooled.ci.done-and-torndown
-pooled.ci.done-and-torndown:
+pooled.ci.done-and-torndown: build.done
 	ENGINE=${ENGINE} \
 	       make pool-teardown pooled.ci.clean \
 	&& ENGINE=${ENGINE} \
@@ -928,6 +925,50 @@ pooled.ci.done-and-torndown:
 	       make pool-teardown \
 	; ENGINE=${ENGINE} \
 	       make pooled.ci.status \
+	;
+
+.PHONY: s3_test.%.done-and-torndown
+s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
+	set -e; \
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.teardown s3_test.clean \
+	&& ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       NPROC=${NPROC} \
+	       LOAD=${LOAD} \
+	       POOLSIZE=${POOLSIZE} \
+	       TESTS_LIST=${TESTS_LIST} \
+	       ${MAKE} s3_test.$*.done \
+	|| true
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.rr-replay-all.done \
+	;
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.teardown \
+	;
+
+.PHONY: s3_test.%.done-and-torndown
+s3_test.%.done-and-torndown: cvmfs/test/src/%/main          build.done
+	set -e; \
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.teardown s3_test.clean \
+	&& ENGINE=${ENGINE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       NPROC=${NPROC} \
+	       LOAD=${LOAD} \
+	       POOLSIZE=${POOLSIZE} \
+	       TESTS_LIST=${TESTS_LIST} \
+	       ${MAKE} s3_test.$*.done \
+	|| true
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.rr-replay-all.done \
+	;
+	ENGINE=${ENGINE} \
+	       ${MAKE} s3_test.teardown \
 	;
 
 ci.sh.done:
