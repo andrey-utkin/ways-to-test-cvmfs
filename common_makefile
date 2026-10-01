@@ -839,6 +839,7 @@ pooled.ci.rr-replay-all.done:
 	cd container-pool || exit 0; \
 	for dir in booting available taken; do \
 		pushd $${dir}; \
+		shopt -s nullglob; \
 		for x in *; do \
 			echo -n $${x} | grep '^[0-9a-f]\{64\}$$'; \
 			${ENGINE} exec $$x ${WORKCOPY_IN_CONTAINER}/build/cvmfs2-rr-replay-all >> ../../$@ || touch ../../$@.FAILED; \
@@ -855,6 +856,7 @@ pool-teardown:
 	touch terminate; \
 	for dir in booting available taken; do \
 		pushd $${dir}; \
+		shopt -s nullglob; \
 		for x in *; do \
 			echo -n $${x} | grep '^[0-9a-f]\{64\}$$'; \
 			${ENGINE} stop --time 0 $$x || true; \
