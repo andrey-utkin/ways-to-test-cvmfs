@@ -360,7 +360,7 @@ tests.email.draft: s3_test.quick.done pooled.ci.done
 	cat  s3_test.quick.done >> $@.wip || true
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
-	cat  pooled.ci.done status >> $@.wip || true
+	cat  pooled.ci.done.status >> $@.wip || true
 	mv $@.wip $@
 
 WORKCOPY_IN_S3_TEST_CONTAINER := /home/sftnight/cvmfs
