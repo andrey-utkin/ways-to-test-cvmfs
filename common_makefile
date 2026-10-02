@@ -917,25 +917,12 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 
 .PHONY: pooled.ci.done-and-torndown
 pooled.ci.done-and-torndown: build.done
-	ENGINE=${ENGINE} \
-	       make pool-teardown pooled.ci.clean \
-	&& ENGINE=${ENGINE} \
-	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
-	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
-	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       NPROC=${NPROC} \
-	       POOLSIZE=${POOLSIZE} \
-	       TESTS_LIST=${TESTS_LIST} \
-	       make pooled.ci.done \
-	|| true
-	ENGINE=${ENGINE} \
-	       make pooled.ci.rr-replay-all.done \
-	;
-	ENGINE=${ENGINE} \
-	       make pool-teardown \
-	; ENGINE=${ENGINE} \
-	       make pooled.ci.status | tee pooled.ci.done.status \
-	;
+	ENGINE=${ENGINE} ${MAKE} pool-teardown pooled.ci.clean
+	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC POOLSIZE TESTS_LIST \
+	       ${MAKE} pooled.ci.done
+	ENGINE=${ENGINE} ${MAKE} pooled.ci.rr-replay-all.done
+	ENGINE=${ENGINE} ${MAKE} pool-teardown
+	ENGINE=${ENGINE} ${MAKE} pooled.ci.status | tee pooled.ci.done.status
 
 .PHONY: s3_test.%.done-and-torndown
 s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
