@@ -739,7 +739,7 @@ s3_test.%.done: ../../../test.runner.s3-%.bash
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} exec -u sftnight -T --workdir /home/sftnight/cvmfs cvmfs-dev \
 		./test.runner.s3-$*.bash | tee $@.out \
-	; echo $$? > ../$@.exitcode \
+	; echo $${PIPESTATUS[0]} > ../$@.exitcode \
 	;
 	test -f $@.exitcode
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
