@@ -51,7 +51,7 @@ debug:
 	@#echo ${IMAGE_NAME}
 
 .PHONY: clean
-clean: pooled.ci.clean ci.clean
+clean: tests.clean ci.clean
 	rm -f *.done *.FAILED *.PASSED *.exitcode
 
 .PHONY: wipe-build-image
@@ -335,15 +335,18 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 #tests.done: unittests-parallel.done pooled.ci.done-and-torndown
 #tests.done: s3_test.all.done test.902-cvmfs-posix-tools.with-systemd.done test.901-ingestsql.with-systemd.done
 # tests.done: s3_test.all.done-and-torndown
-tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done-and-torndown s3_test.quick.done-and-torndown
+# s3_test is not parallelizable in vanilla
+tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done # s3_test.quick.done
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
+.PHONY: tests.done-and-torndown
+tests.done-and-torndown: tests.done
+	make tests.clean
+
 .PHONY: tests.clean
-tests.clean:
+tests.clean: s3_test.clean pooled.ci.clean
 	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test*.done tests.email tests.email.draft tests.email.attachments
-	${MAKE} pool-teardown || true
-	${MAKE} s3_test.teardown || true
 
 tests.email: tests.email.draft
 	cp -a $< $@.wip
@@ -720,7 +723,7 @@ s3_test.setup: build.done cvmfs/test/src/%/main cvmfs/test/common/container/s3-i
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
-	&& ${COMPOSE} up -d \
+	&& ${COMPOSE} --${ENGINE}-run-args='--pids-limit=-1' up -d \
 	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
 		sudo bash -x cvmfs_config setup \
 		 \
@@ -774,6 +777,10 @@ s3_test.teardown: cvmfs/test/common/container/s3-integration/s3-compose.yml
 	&& ${COMPOSE} down -v || true
 	rm s3_test.setup || true
 
+.PHONY: s3_test.clean
+s3_test.clean: s3_test.teardown
+	rm -f s3_test.done*
+
 .PHONY: s3_test.status
 s3_test.status: cvmfs/test/common/container/s3-integration/s3-compose.yml
 	export COMPOSE_FILE=$< \
@@ -811,7 +818,7 @@ pooled.ci.%.done: build.done cvmfs/test/src/%/main
 	@if [[ -f pooled.ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
 
 .PHONY: pooled.ci.clean
-pooled.ci.clean:
+pooled.ci.clean: pool-teardown
 	ls pooled.ci.*.FAILED | wc -l; ls pooled.ci.*.PASSED | wc -l
 	rm -rf pooled.ci.done pooled.ci.*.done  pooled.ci.*.log  pooled.ci.*.done.wip  pooled.ci.*.PASSED  pooled.ci.*.FAILED  pooled.ci.*.logs.*.tar.zst
 	rm -f pooled.ci.setup # to reset time calculations
@@ -927,9 +934,8 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	#touch $@
 
 .PHONY: pooled.ci.done-and-torndown
-pooled.ci.done-and-torndown: build.done
-	ENGINE=${ENGINE} ${MAKE} pool-teardown pooled.ci.clean
-	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC POOLSIZE TESTS_LIST \
+pooled.ci.done-and-torndown: build.done pooled.ci.clean
+	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} pooled.ci.done
 	ENGINE=${ENGINE} ${MAKE} pooled.ci.rr-replay-all.done
 	ENGINE=${ENGINE} ${MAKE} pool-teardown
@@ -937,47 +943,23 @@ pooled.ci.done-and-torndown: build.done
 
 .PHONY: s3_test.%.done-and-torndown
 s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
-	set -e; \
-	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.teardown s3_test.clean \
-	&& ENGINE=${ENGINE} \
-	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
-	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
-	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       NPROC=${NPROC} \
-	       LOAD=${LOAD} \
-	       POOLSIZE=${POOLSIZE} \
-	       TESTS_LIST=${TESTS_LIST} \
-	       ${MAKE} s3_test.$*.done \
-	|| true
+	ENGINE=${ENGINE} ${MAKE} s3_test.clean
+	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
+	       ${MAKE} s3_test.$*.done || true
 	#ENGINE=${ENGINE} \
-	#       ${MAKE} s3_test.rr-replay-all.done \
-	#;
+	#       ${MAKE} s3_test.rr-replay-all.done
 	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.teardown \
-	;
+	       ${MAKE} s3_test.teardown
 
 .PHONY: s3_test.%.done-and-torndown
 s3_test.%.done-and-torndown: cvmfs/test/src/%/main          build.done
-	set -e; \
+	ENGINE=${ENGINE} ${MAKE} s3_test.clean
+	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
+	       ${MAKE} s3_test.$*.done || true
+	#ENGINE=${ENGINE} \
+	#       ${MAKE} s3_test.rr-replay-all.done
 	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.teardown s3_test.clean \
-	&& ENGINE=${ENGINE} \
-	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
-	       WORKCOPY_IN_CONTAINER=${WORKCOPY_IN_CONTAINER} \
-	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
-	       NPROC=${NPROC} \
-	       LOAD=${LOAD} \
-	       POOLSIZE=${POOLSIZE} \
-	       TESTS_LIST=${TESTS_LIST} \
-	       ${MAKE} s3_test.$*.done \
-	|| true
-	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.rr-replay-all.done \
-	;
-	ENGINE=${ENGINE} \
-	       ${MAKE} s3_test.teardown \
-	;
+	       ${MAKE} s3_test.teardown
 
 ci.sh.done:
 	cd cvmfs && ENGINE=${ENGINE} \
