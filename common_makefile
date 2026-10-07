@@ -771,20 +771,22 @@ s3_test.%.done: cvmfs/test/src/%/main
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
 .PHONY: s3_test.teardown
-s3_test.teardown: cvmfs/test/common/container/s3-integration/s3-compose.yml
-	export COMPOSE_FILE=$< \
+s3_test.teardown:
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& if ! [[ -f $${COMPOSE_FILE} ]]; then exit 0; fi \
 	&& ${COMPOSE} down -v || true
-	rm s3_test.setup || true
+	rm -f s3_test.setup
 
 .PHONY: s3_test.clean
 s3_test.clean: s3_test.teardown
 	rm -f s3_test.done*
 
 .PHONY: s3_test.status
-s3_test.status: cvmfs/test/common/container/s3-integration/s3-compose.yml
-	export COMPOSE_FILE=$< \
+s3_test.status:
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& if ! [[ -f $${COMPOSE_FILE} ]]; then exit 0; fi \
 	&& ${COMPOSE} ps
 
 .PHONY: s3_test.shell
