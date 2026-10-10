@@ -35,6 +35,7 @@ LOAD ?= ${NPROC}
 #POOLSIZE = 8
 POOLSIZE ?= ${NPROC}
 CMAKE_EXTRA_OPTS ?= ""
+MAILTO ?= root
 
 .PHONY: default debug clean wipe-build-image mrproper lint lint-fix shell.with-systemd
 default: tests.done
@@ -152,20 +153,27 @@ MESSAGE_ID ?= $(shell date +%F_%H%M%S.%9N)@$(shell hostnamectl hostname)
 MESSAGE_ID_HEADER := Message-Id: <${MESSAGE_ID}>
 IN_REPLY_TO_HEADER ?=
 REPORT_SUBJECT_LINE ?= ${SUBJECT} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)
+ATTACHMENTS_OPTS ?= # add -a file1 file2 ... fileN
 .PHONY: report
 report:
-	echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
+	#echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
+	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}"; cat ${CONTENTS_FILE}) | neomutt -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
 
 DESCR ?= ${GOALS}
+REPORT_OUTPUT ?= 0
 .PHONY: report-make
 report-make:
 	# Couldn't get MESSAGE_ID evaluated only once other than by evaluating it in recipe
 	MESSAGE_ID=$(shell date +%F_%H%M%S.%9N)@$(shell hostnamectl hostname); \
 		${MAKE} report SUBJECT="make ${DESCR}" MESSAGE_ID=$${MESSAGE_ID}; \
-		${MAKE} $${GOALS}; \
-		RC=$$?; \
+		OUTPUT_FILE=/dev/null; \
+		if [[ $${REPORT_OUTPUT} == 1 ]]; then \
+			export OUTPUT_FILE=$$(mktemp); \
+		fi; \
+		${MAKE} $${GOALS} |& tee $${OUTPUT_FILE}; \
+		RC=$${PIPESTATUS[0]}; \
 		if [[ $${RC} == 0 ]]; then OUTCOME='__ok'; else OUTCOME='FAIL'; fi; \
-		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; \
+		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; CONTENTS_FILE=$${OUTPUT_FILE}; \
 		exit $${RC}
 
 report-build.done:
@@ -351,7 +359,7 @@ tests.clean: s3_test.clean pooled.ci.clean
 tests.email: tests.email.draft
 	cp -a $< $@.wip
 	# sendmail root < $@.wip # postfix sendmail lacks attachment handling
-	neomutt -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- root < $@.wip
+	neomutt -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- ${MAILTO} < $@.wip
 	mv $@.wip $@
 
 #tests.email.draft: s3_test.quick.done pooled.ci.done
