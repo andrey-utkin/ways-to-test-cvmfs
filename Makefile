@@ -1,7 +1,7 @@
 # Make each subdir, supporting multiple top-level targets.
 # https://stackoverflow.com/a/17845120
 
-TOPTARGETS := tests.done unittests.done clean mrproper debug builder.image.done builder.image.remake build.done pooled.ci.status pooled.ci.clean pooled.ci.done pool-teardown pooled.ci.done-and-torndown git-fetch-reset wipe-build wipe-build-image wipe-build-except-externals s3_test.teardown rr.done rr.build.done build.update build.update.clean build.update.incremental tests.clean tests.update tests.update.or-rerun report-build.done report-make report
+TOPTARGETS := tests.done unittests.done clean mrproper debug builder.image.done builder.image.remake build.done pooled.ci.status pooled.ci.clean pooled.ci.done pool-teardown pooled.ci.done-and-torndown git-fetch-reset wipe-build wipe-build-image wipe-build-except-externals s3_test.teardown s3_test.clean s3_test.quick.done s3_test.all.done rr.done rr.build.done build.update build.update.clean build.update.incremental tests.clean tests.update tests.update.or-rerun report-build.done report-make report
 
 FLAVOUR := vanilla
 
