@@ -218,7 +218,7 @@ tests.update:
 	${MAKE} build.update; \
 	${MAKE} is-testing-up-to-date && exit 0; \
 	set -e; \
-	rm -f tests.done; \
+	${MAKE} tests.clean; \
 	${MAKE} tests.done; \
 	${MAKE} tests.email; \
 	cat tests.email; \
@@ -228,7 +228,7 @@ tests.update:
 tests.update.or-rerun:
 	if ! ${MAKE} is-build-up-to-date; then ${MAKE} git-fetch-reset; fi
 	set -e; \
-	rm -f tests.done; \
+	${MAKE} tests.clean; \
 	${MAKE} tests.done; \
 	${MAKE} tests.email; \
 	cat tests.email; \
