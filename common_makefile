@@ -354,7 +354,8 @@ tests.email: tests.email.draft
 	neomutt -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- root < $@.wip
 	mv $@.wip $@
 
-tests.email.draft: s3_test.quick.done pooled.ci.done
+#tests.email.draft: s3_test.quick.done pooled.ci.done
+tests.email.draft: pooled.ci.done
 	> $@.wip
 	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
 	echo >> $@.wip
@@ -362,12 +363,10 @@ tests.email.draft: s3_test.quick.done pooled.ci.done
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	rm -rf tests.email.attachments
 	mkdir  tests.email.attachments
-	echo s3_test.quick.done >> $@.wip
-	cat  s3_test.quick.done >> $@.wip || true
+	#echo s3_test.quick.done >> $@.wip
+	#cat  s3_test.quick.done >> $@.wip || true
 
-	# This file is very big
-	#grep 'Failures: 0' s3_test.quick.done || cp -a s3_test.quick.done.log tests.email.attachments/
-	grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
+	#grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
 
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
