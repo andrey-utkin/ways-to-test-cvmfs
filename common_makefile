@@ -158,7 +158,7 @@ CONTENTS_FILE ?= /dev/null
 .PHONY: report
 report:
 	#echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
-	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}"; cat ${CONTENTS_FILE}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
+	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}\n"; cat ${CONTENTS_FILE}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
 
 DESCR ?= ${GOALS}
 REPORT_OUTPUT ?= 0
