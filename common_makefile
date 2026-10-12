@@ -381,7 +381,19 @@ tests.email.draft: pooled.ci.done
 	echo pooled.ci.done.status >> $@.wip
 	cat  pooled.ci.done.status >> $@.wip || true
 
-	cp -a pooled.ci.*.FAILED tests.email.attachments/
+	#cp -a pooled.ci.*.FAILED tests.email.attachments/
+	# just copying may fail with
+	# "postdrop: warning: uid=0: File too large"
+	# "sendmail: fatal: root(0): message file too big"
+	for a in pooled.ci.*.FAILED; do \
+		size=$$(stat --format=%s $${a}); \
+		if [[ $${size} -gt 500000 ]]; then \
+			zstd -c -k --ultra -T0 -20 $${a} > tests.email.attachments/$${a}.zst; \
+			tail -n 100 $${a} > tests.email.attachments/$${a}; \
+		else \
+			cp -a $${a} tests.email.attachments/; \
+		fi \
+	done
 
 	mv $@.wip $@
 
