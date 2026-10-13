@@ -351,6 +351,10 @@ tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done # s3_
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
+tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done s3_test.quick.done
+	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
+	touch $@
+
 .PHONY: tests.done-and-torndown
 tests.done-and-torndown: tests.done
 	make tests.clean
