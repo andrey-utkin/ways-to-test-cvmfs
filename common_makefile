@@ -9,6 +9,7 @@ UPUPDIRNAME = $(shell basename $(shell readlink -f ../..))
 MY_DISTRO := ${DIRNAME}
 # docker or podman
 ENGINE := ${UPDIRNAME}
+DOCKER_HOST ?= unix:///var/run/${ENGINE}/${ENGINE}.sock
 COMPOSE := ${ENGINE}-compose
 NETWORK ?= $(shell if [[ ${ENGINE} == podman ]]; then echo --network=private; else echo --network=bridge; fi)
 PKG_FMT ?= $(shell if [[ ${MY_DISTRO} =~ debian ]] || [[ ${MY_DISTRO} =~ ubuntu ]]; then echo DEB; else echo RPM; fi)
@@ -550,18 +551,22 @@ unittests-fast.with-systemd.done: build.done
 	@${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@" bash -c 'while ! systemctl status>/dev/null; do echo -n .; sleep 1; done'
 	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
 
-# Failed under
-# DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu_unittest.yaml
-UNITTESTS_FAILING_UNDER_ACT := T_FsTraversal.BlockDevice:T_Util.ManagedExecExecuteBinaryDoubleFork
-unittests-act.done: cvmfs/cvmfs/cvmfs.cc
+UNITTESTS_FAILING_UNDER_ACT := T_Dns.CaresResolverSearchDomainSlow:T_Util.ManagedExecExecuteBinaryDoubleFork
+ACT_PLATOFRM_OPTS ?= -P ubuntu-latest=docker.io/catthehacker/ubuntu:full-latest
+cvmfs/.github/workflows/%.yaml: cvmfs/cvmfs/cvmfs.cc
+%.act.done: cvmfs/.github/workflows/%.yaml
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
-	cd cvmfs && DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu_unittest.yaml
-	touch $@
+	export DOCKER_HOST && \
+	cd cvmfs && \
+	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --privileged --workflows=.github/workflows/$*.yaml |& tee $@.wip
+	mv $@.wip $@
 
-ci_ubuntu.done: cvmfs/cvmfs/cvmfs.cc
+all.act.done: cvmfs/cvmfs/cvmfs.cc
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
-	cd cvmfs && DOCKER_HOST='unix:///var/run/podman/podman.sock' act --workflows .github/workflows/ci_ubuntu.yaml --privileged
-	touch $@
+	export DOCKER_HOST && \
+	cd cvmfs && \
+	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --privileged --workflows=.github/workflows/        |& tee $@.wip
+	mv $@.wip $@
 
 .PHONY: format-staged
 format-staged: build.done
