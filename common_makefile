@@ -611,7 +611,7 @@ unittests-fast.with-systemd.done: build.done
 	${ENGINE} exec -i --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_NAME}-$@"  gtest-parallel build/test/unittests/cvmfs_unittests_debug --gtest_filter="${UNITTESTS_FILTER_FAST}" --output_dir=/tmp --serialize_test_cases --workers=${NPROC} # --print_test_command
 
 UNITTESTS_FAILING_UNDER_ACT := T_Dns.CaresResolverSearchDomainSlow:T_Util.ManagedExecExecuteBinaryDoubleFork
-ACT_PLATOFRM_OPTS ?= -P ubuntu-latest=docker.io/catthehacker/ubuntu:full-latest
+ACT_PLATFORM_OPTS ?= -P ubuntu-latest=docker.io/catthehacker/ubuntu:full-latest
 cvmfs/.github/workflows/%.yaml: cvmfs/cvmfs/cvmfs.cc
 %.act.done: cvmfs/.github/workflows/%.yaml
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
