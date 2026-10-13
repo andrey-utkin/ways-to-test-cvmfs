@@ -1,3 +1,5 @@
+-include *.mk
+
 # Make each subdir, supporting multiple top-level targets.
 # https://stackoverflow.com/a/17845120
 
