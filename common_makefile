@@ -780,7 +780,7 @@ s3_test.%.done: ../../../test.runner.s3-%.bash
 	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.log || touch $@.log
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv cvmfs/$@.out $@
-	#(echo -n 'exit '; cat $@.exitcode) | bash
+	(echo -n 'exit '; cat $@.exitcode) | bash
 
 s3_test.%.done: cvmfs/test/src/%/main
 	make s3_test.setup
@@ -798,7 +798,7 @@ s3_test.%.done: cvmfs/test/src/%/main
 	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv $@.wip $@
-	#(echo -n 'exit '; cat $@.exitcode) | bash
+	(echo -n 'exit '; cat $@.exitcode) | bash
 
 S3_TEST_TEARDOWN_PREFIX ?= quick
 .PHONY: s3_test.teardown
