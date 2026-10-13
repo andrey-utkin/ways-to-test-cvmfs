@@ -156,30 +156,36 @@ MESSAGE_ID_HEADER := Message-Id: <${MESSAGE_ID}>
 IN_REPLY_TO_HEADER ?=
 REPORT_SUBJECT_LINE ?= ${SUBJECT} ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)
 ATTACHMENTS_OPTS ?= # add -a file1 file2 ... fileN
-CONTENTS_FILE ?= /dev/null
+CONTENTS_FILES ?= /dev/null
 .PHONY: report
 report:
 	#echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
-	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}\n"; cat ${CONTENTS_FILE}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
+	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}\n"; cat ${CONTENTS_FILES}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
 
 DESCR ?= ${GOALS}
-REPORT_OUTPUT ?= 0
+
 .PHONY: report-make
 report-make:
 	# Couldn't get MESSAGE_ID evaluated only once other than by evaluating it in recipe
 	MESSAGE_ID=$(shell date +%F_%H%M%S.%9N)@$(shell hostnamectl hostname); \
 		${MAKE} report SUBJECT="make ${DESCR}" MESSAGE_ID=$${MESSAGE_ID}; \
 		OUTPUT_FILE=/dev/null; \
-		if [[ $${REPORT_OUTPUT} == 1 ]]; then \
-			export OUTPUT_FILE=$$(mktemp); \
-		fi; \
-		${MAKE} $${GOALS} |& tee $${OUTPUT_FILE}; \
+		${MAKE} $${GOALS}; \
 		RC=$${PIPESTATUS[0]}; \
-		if [[ $${RC} == 0 ]]; then OUTCOME='__ok'; else OUTCOME='FAIL'; fi; \
-		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; CONTENTS_FILE=$${OUTPUT_FILE}; \
-		exit $${RC}
+		if [[ $${RC} == 0 ]]; then OUTCOME='ok'; else OUTCOME='FAIL'; fi; \
+		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; CONTENTS_FILES="${GOALS}"; \
+		#exit $${RC} # if we
 
-report-build.done:
+succeed:
+	true
+fail:
+	false
+report-make.test:
+	${MAKE} report-make GOALS=succeed
+	${MAKE} report-make GOALS=fail
+	${MAKE} report-make GOALS="succeed fail"
+
+build.report:
 	HASH=$$(cd cvmfs && git show --format=%h --no-patch HEAD); \
 	     GOALS=build.done DESCR="build $${HASH}" ${MAKE} report-make
 
@@ -197,9 +203,9 @@ build.update:
 	${MAKE} is-build-up-to-date && exit 0; \
 	${MAKE} git-fetch-reset; \
 	${MAKE} wipe-build-image; \
-	if   [[ "${BUILD_UPDATE_POLICY}" == incremental ]]; then                                                    ${MAKE} report-build.done; \
-	elif [[ "${BUILD_UPDATE_POLICY}" == clean       ]]; then                              ${MAKE} wipe-build && ${MAKE} report-build.done; \
-	elif [[ "${BUILD_UPDATE_POLICY}" == both        ]]; then ${MAKE} report-build.done && ${MAKE} wipe-build && ${MAKE} report-build.done; \
+	if   [[ "${BUILD_UPDATE_POLICY}" == incremental ]]; then                                               ${MAKE} build.report; \
+	elif [[ "${BUILD_UPDATE_POLICY}" == clean       ]]; then                         ${MAKE} wipe-build && ${MAKE} build.report; \
+	elif [[ "${BUILD_UPDATE_POLICY}" == both        ]]; then ${MAKE} build.report && ${MAKE} wipe-build && ${MAKE} build.report; \
 	else echo "Invalid BUILD_UPDATE_POLICY value ${BUILD_UPDATE_POLICY}"; exit 1; fi; \
 	true ;
 
