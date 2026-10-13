@@ -185,6 +185,11 @@ report-make.test:
 	${MAKE} report-make GOALS=fail
 	${MAKE} report-make GOALS="succeed fail"
 
+%.report:
+	${MAKE} report-make GOALS=$*
+
+dot-report.test: succeed.report fail.report
+
 build.report:
 	HASH=$$(cd cvmfs && git show --format=%h --no-patch HEAD); \
 	     GOALS=build.done DESCR="build $${HASH}" ${MAKE} report-make
@@ -375,6 +380,12 @@ tests.email: tests.email.draft
 	neomutt -H - -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- ${MAILTO} < $@.wip
 	mv $@.wip $@
 
+tests-extended.email: tests-extended.email.draft
+	cp -a $< $@.wip
+	# sendmail root < $@.wip # postfix sendmail lacks attachment handling
+	neomutt -H - -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- ${MAILTO} < $@.wip
+	mv $@.wip $@
+
 #tests.email.draft: s3_test.quick.done pooled.ci.done
 tests.email.draft: pooled.ci.done
 	> $@.wip
@@ -388,6 +399,39 @@ tests.email.draft: pooled.ci.done
 	#cat  s3_test.quick.done >> $@.wip || true
 
 	#grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
+
+	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
+	echo pooled.ci.done.status >> $@.wip
+	cat  pooled.ci.done.status >> $@.wip || true
+
+	#cp -a pooled.ci.*.FAILED tests.email.attachments/
+	# just copying may fail with
+	# "postdrop: warning: uid=0: File too large"
+	# "sendmail: fatal: root(0): message file too big"
+	for a in pooled.ci.*.FAILED; do \
+		size=$$(stat --format=%s $${a}); \
+		if [[ $${size} -gt 500000 ]]; then \
+			zstd -c -k --ultra -T0 -20 $${a} > tests.email.attachments/$${a}.zst; \
+			tail -n 100 $${a} > tests.email.attachments/$${a}; \
+		else \
+			cp -a $${a} tests.email.attachments/; \
+		fi \
+	done
+
+	mv $@.wip $@
+
+tests-extended.email.draft: s3_test.quick.done pooled.ci.done
+	> $@.wip
+	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
+	echo >> $@.wip
+	(cd cvmfs && git show --no-patch HEAD) >> $@.wip
+	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
+	rm -rf tests.email.attachments
+	mkdir  tests.email.attachments
+	echo s3_test.quick.done >> $@.wip
+	cat  s3_test.quick.done >> $@.wip || true
+
+	grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
 
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
