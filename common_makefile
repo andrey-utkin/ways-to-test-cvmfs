@@ -370,6 +370,11 @@ tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done s3_te
 tests.done-and-torndown: tests.done
 	make tests.clean
 
+.PHONY: tests.teardown
+tests.teardown: pool-teardown
+.PHONY: tests-extended.teardown
+tests-extended.teardown: pool-teardown s3_test.quick.teardown
+
 .PHONY: tests.clean
 tests.clean: s3_test.clean pooled.ci.clean
 	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test*.done tests.email tests.email.draft tests.email.attachments
