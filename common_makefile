@@ -160,7 +160,7 @@ CONTENTS_FILES ?= /dev/null
 .PHONY: report
 report:
 	#echo -e "Subject: ${REPORT_SUBJECT_LINE}\n${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}" | sendmail root
-	(echo "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}\n"; cat ${CONTENTS_FILES}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
+	(echo -e "${MESSAGE_ID_HEADER}\n${IN_REPLY_TO_HEADER}\n"; cat ${CONTENTS_FILES}) | neomutt -H - -s '${REPORT_SUBJECT_LINE}' ${ATTACHMENTS_OPTS} -- ${MAILTO}
 
 DESCR ?= ${GOALS}
 
@@ -173,7 +173,7 @@ report-make:
 		${MAKE} $${GOALS}; \
 		RC=$${PIPESTATUS[0]}; \
 		if [[ $${RC} == 0 ]]; then OUTCOME='ok'; else OUTCOME='FAIL'; fi; \
-		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>"; CONTENTS_FILES="${GOALS}"; \
+		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>" CONTENTS_FILES="${GOALS}"; \
 		#exit $${RC} # if we
 
 succeed:
