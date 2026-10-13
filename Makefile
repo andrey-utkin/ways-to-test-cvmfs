@@ -5,9 +5,9 @@ TOPTARGETS := tests.done unittests.done clean mrproper debug builder.image.done 
 
 FLAVOUR := testability
 
-SUBDIRS_VANILLA := $(wildcard vanilla/*/*/)
-SUBDIRS_TESTABILITY := $(wildcard testability/*/*/)
-SUBDIRS ?= $(wildcard ${FLAVOUR}/*/*/)
+SUBDIRS_VANILLA := $(wildcard vanilla/[a-z]*/*/)
+SUBDIRS_TESTABILITY := $(wildcard testability/[a-z]*/*/)
+SUBDIRS ?= $(wildcard ${FLAVOUR}/[a-z]*/*/)
 ## Those which don't require x86-64-v3:
 #SUBDIRS := $(wildcard upstream/centos_9/*/ upstream/fedora_42/*/)
 
@@ -19,6 +19,9 @@ $(SUBDIRS):
 	$(MAKE) -C $@ $(MAKECMDGOALS)
 
 .PHONY: $(TOPTARGETS) $(SUBDIRS)
+
+%.act.done: ${FLAVOUR}/podman/ACT
+	${MAKE} -C $< $@
 
 .PRECIOUS: iplocation.mmdb
 iplocation.mmdb:
