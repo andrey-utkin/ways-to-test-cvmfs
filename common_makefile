@@ -625,8 +625,10 @@ cvmfs/.github/workflows/%.yaml: cvmfs/cvmfs/cvmfs.cc
 all.act.done: cvmfs/cvmfs/cvmfs.cc
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
 	export DOCKER_HOST && \
+	ARTIFACTS_DIR=${PWD}/artifacts; \
+	mkdir -p $${ARTIFACTS_DIR}; \
 	cd cvmfs && \
-	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --privileged --workflows=.github/workflows/        |& tee ../$@.wip
+	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --artifact-server-path=${ARTIFACTS_DIR} --privileged --workflows=.github/workflows/        |& tee ../$@.wip
 	mv $@.wip $@
 
 .PHONY: format-staged
