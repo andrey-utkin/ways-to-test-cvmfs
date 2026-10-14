@@ -711,16 +711,19 @@ franken.test.%.with-systemd.done: franken.build.done
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} test.$*.with-systemd.done
 
 franken.s3_test.%.done: franken.build.done
-	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.done
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.done; \
+	cp -a s3_test.$*.done $@
 
 franken.s3_test.teardown:
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.teardown
 
 franken.%.done: franken.build.done
-	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*.done
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*.done; \
+	cp -a $*.done $@
 
 franken.%:
-	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*; \
+	cp -a $*.done $@
 
 
 test.%.with-systemd.done: build.done cvmfs/test/src/%/main ../../../iplocation.mmdb
