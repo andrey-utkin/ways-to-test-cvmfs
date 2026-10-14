@@ -436,7 +436,7 @@ tests-extended.email.draft: s3_test.quick.done pooled.ci.done
 	echo s3_test.quick.done >> $@.wip
 	cat  s3_test.quick.done >> $@.wip || true
 
-	grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
+	grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/ || true
 
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
