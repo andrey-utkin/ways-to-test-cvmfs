@@ -376,8 +376,8 @@ tests.teardown: pool-teardown
 tests-extended.teardown: pool-teardown s3_test.quick.teardown
 
 .PHONY: tests.clean
-tests.clean: s3_test.clean pooled.ci.clean
-	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test*.done tests.email tests.email.draft tests.email.attachments
+tests.clean: s3_test.quick.clean pooled.ci.clean
+	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test.quick.done* tests.email tests.email.draft tests.email.attachments
 
 tests.email: tests.email.draft
 	cp -a $< $@.wip
@@ -714,8 +714,12 @@ franken.s3_test.%.done: franken.build.done
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.done; \
 	cp -a s3_test.$*.done $@
 
-franken.s3_test.teardown:
-	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.teardown
+franken.s3_test.%.teardown:
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.teardown
+
+franken.s3_test.%.clean: franken.s3_test.%.teardown
+	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.clean
+	rm -f franken.s3_test.$*.done*
 
 franken.%.done: franken.build.done
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} $*.done; \
@@ -788,7 +792,7 @@ s3_test_orig.all.done:
 	;
 	test -f $@.exitcode
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/docker-compose.yml \
-	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME} \
+	&& export COMPOSE_PROJECT_NAME=orig_${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} exec cvmfs-dev cat /tmp/cvmfs-s3-test.log > $@.wip || touch $@.wip
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv $@.wip $@
@@ -812,7 +816,7 @@ cvmfs/test/common/container/s3-integration/s3-compose.%.yml: cvmfs/test/common/c
 s3_test.%.setup: build.done cvmfs/test/common/container/s3-integration/s3-compose.%.yml
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.$*.yml \
-	&& export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}.$* \
+	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} --${ENGINE}-run-args='--pids-limit=-1' up -d \
 	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
 		sudo bash -x cvmfs_config setup \
@@ -1039,7 +1043,7 @@ pooled.ci.done-and-torndown: build.done pooled.ci.clean
 
 .PHONY: s3_test.%.done-and-torndown
 s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
-	ENGINE=${ENGINE} ${MAKE} s3_test.clean
+	ENGINE=${ENGINE} ${MAKE} s3_test.$*.clean
 	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} s3_test.$*.done || true
 	#ENGINE=${ENGINE} \
@@ -1049,7 +1053,7 @@ s3_test.%.done-and-torndown: ../../../test.runner.s3-%.bash build.done
 
 .PHONY: s3_test.%.done-and-torndown
 s3_test.%.done-and-torndown: cvmfs/test/src/%/main          build.done
-	ENGINE=${ENGINE} ${MAKE} s3_test.clean
+	ENGINE=${ENGINE} ${MAKE} s3_test.$*.clean
 	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} s3_test.$*.done || true
 	#ENGINE=${ENGINE} \
