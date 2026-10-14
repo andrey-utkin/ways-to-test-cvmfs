@@ -807,6 +807,7 @@ s3_test_orig.teardown:
 	&& ${COMPOSE} down -v || true
 	rm s3_test_orig.all.done || true
 
+.PRECIOUS: cvmfs/test/common/container/s3-integration/s3-compose.%.yml
 cvmfs/test/common/container/s3-integration/s3-compose.%.yml: cvmfs/test/common/container/s3-integration/docker-compose.yml build.done
 	cp $< $@.wip
 	grep 'image: ghcr.io/cvmfs/cvmfs-dev:latest' $@.wip
