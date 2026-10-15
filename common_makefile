@@ -614,13 +614,14 @@ unittests-fast.with-systemd.done: build.done
 UNITTESTS_FAILING_UNDER_ACT := T_Dns.CaresResolverSearchDomainSlow:T_Util.ManagedExecExecuteBinaryDoubleFork
 ACT_PLATFORM_OPTS ?= -P ubuntu-latest=docker.io/catthehacker/ubuntu:full-latest
 cvmfs/.github/workflows/%.yaml: cvmfs/cvmfs/cvmfs.cc
-%.act.done: cvmfs/.github/workflows/%.yaml
+cvmfs/.github/workflows/%.yml: cvmfs/cvmfs/cvmfs.cc
+%.act.done: cvmfs/.github/workflows/%
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
 	export DOCKER_HOST && \
 	ARTIFACTS_DIR=${PWD}/artifacts; \
 	mkdir -p $${ARTIFACTS_DIR}; \
 	cd cvmfs && \
-	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --artifact-server-path=${ARTIFACTS_DIR} --privileged --workflows=.github/workflows/$*.yaml |& tee ../$@.wip
+	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --artifact-server-path=${ARTIFACTS_DIR} --privileged --workflows=.github/workflows/$* |& tee ../$@.wip
 	mv $@.wip $@
 
 all.act.done: cvmfs/cvmfs/cvmfs.cc
