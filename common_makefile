@@ -414,6 +414,7 @@ tests.email.draft: pooled.ci.done
 	# just copying may fail with
 	# "postdrop: warning: uid=0: File too large"
 	# "sendmail: fatal: root(0): message file too big"
+	shopt -s nullglob; \
 	for a in pooled.ci.*.FAILED; do \
 		size=$$(stat --format=%s $${a}); \
 		if [[ $${size} -gt 500000 ]]; then \
@@ -447,6 +448,7 @@ tests-extended.email.draft: s3_test.quick.done pooled.ci.done
 	# just copying may fail with
 	# "postdrop: warning: uid=0: File too large"
 	# "sendmail: fatal: root(0): message file too big"
+	shopt -s nullglob; \
 	for a in pooled.ci.*.FAILED; do \
 		size=$$(stat --format=%s $${a}); \
 		if [[ $${size} -gt 500000 ]]; then \
