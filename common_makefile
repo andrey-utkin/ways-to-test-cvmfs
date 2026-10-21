@@ -820,12 +820,13 @@ cvmfs/test/common/container/s3-integration/s3-compose.%.yml: cvmfs/test/common/c
 	sed -i -e 's#^    cvmfs-dev:#&\n        ulimits:\n          core: -1\n          nproc: -1#' $@.wip
 	mv $@.wip $@
 
+COMPOSE_ARGS_PIDS_UNLIMITED ?= $(shell if [[ ${COMPOSE} == podman-compose ]]; then echo --${ENGINE}-run-args=--pids-limit=-1; else echo; fi)
 .PRECIOUS: s3_test.%.setup
 s3_test.%.setup: build.done cvmfs/test/common/container/s3-integration/s3-compose.%.yml
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.$*.yml \
 	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
-	&& ${COMPOSE} --${ENGINE}-run-args='--pids-limit=-1' up -d \
+	&& ${COMPOSE} ${COMPOSE_ARGS_PIDS_UNLIMITED} up -d \
 	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
 		sudo bash -x cvmfs_config setup \
 		 \
