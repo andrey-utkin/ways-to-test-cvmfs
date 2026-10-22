@@ -37,7 +37,7 @@ launch_one() {
 		"${PRIORITIZE[@]}" ${ENGINE} exec "$CONTAINER_ID" mkdir -p /var/lib/cvmfs-server/geo
 		# PWD is container-pool/booting/
 		"${PRIORITIZE[@]}" ${ENGINE} cp ../../../../../iplocation.mmdb "$CONTAINER_ID":/var/lib/cvmfs-server/geo/
-		"${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" bash -c 'while ! (systemctl status && systemctl is-active multi-user.target && (systemctl start apache2 || systemctl start httpd) && (systemctl is-active apache2 || systemctl is-active httpd) ) &> /dev/null; do echo -n .; sleep 1; done && cvmfs_config setup && (echo CVMFS_IPV4_ONLY=1; echo CVMFS_TIMEOUT=60; echo CVMFS_TIMEOUT_DIRECT=60) >> /etc/cvmfs/default.conf'
+		"${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" bash -c 'while ! (test -e /run/systemd/private && systemctl status && systemctl is-active multi-user.target && (systemctl start apache2 || systemctl start httpd) && (systemctl is-active apache2 || systemctl is-active httpd) ) &> /dev/null; do echo -n .; sleep 1; done && cvmfs_config setup && (echo CVMFS_IPV4_ONLY=1; echo CVMFS_TIMEOUT=60; echo CVMFS_TIMEOUT_DIRECT=60) >> /etc/cvmfs/default.conf'
 		for attempt in {1..5}; do
 			if "${PRIORITIZE[@]}" ${ENGINE} exec -u sftnight --workdir "${WORKCOPY_IN_CONTAINER}" "${CONTAINER_ID}" ./test.runner.with-systemd.bash 002-probe; then
 				mv ./"$CONTAINER_ID" ../available/
