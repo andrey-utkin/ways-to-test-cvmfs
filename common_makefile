@@ -393,7 +393,8 @@ tests-extended.email: tests-extended.email.draft
 	mv $@.wip $@
 
 #tests.email.draft: s3_test.quick.done pooled.ci.done
-tests.email.draft: pooled.ci.done
+tests.email.draft:
+	${MAKE} pooled.ci.done || true
 	> $@.wip
 	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
 	echo >> $@.wip
@@ -427,7 +428,8 @@ tests.email.draft: pooled.ci.done
 
 	mv $@.wip $@
 
-tests-extended.email.draft: s3_test.quick.done pooled.ci.done
+tests-extended.email.draft:
+	${MAKE} s3_test.quick.done pooled.ci.done || true
 	> $@.wip
 	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
 	echo >> $@.wip
