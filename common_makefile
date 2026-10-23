@@ -634,7 +634,7 @@ unprotected.act.done:
 	which node
 	cd cvmfs \
 	&& sudo -u runner git config --global --add safe.directory "$${PWD}" \
-	&& sudo -u runner act --rebuild=false --pull=false  --verbose=false --detect-event=true --artifact-server-path="$${PWD}"/artifacts --workflows=.github/workflows/ways-to-test-cvmfs.yml -P ubuntu-26.04=-self-hosted --local-repository=andrey-utkin/ways-to-test-cvmfs=/usr/local/src/ways-to-test-cvmfs
+	&& sudo -u runner DOCKER_HOST=${DOCKER_HOST} act --rebuild=false --pull=false  --verbose=false --detect-event=true --artifact-server-path="$${PWD}"/artifacts --workflows=.github/workflows/ways-to-test-cvmfs.yml -P self-hosted=-self-hosted --local-repository=andrey-utkin/ways-to-test-cvmfs=/usr/local/src/ways-to-test-cvmfs
 
 all.act.done: cvmfs/cvmfs/cvmfs.cc
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
