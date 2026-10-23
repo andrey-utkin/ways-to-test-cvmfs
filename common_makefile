@@ -628,6 +628,14 @@ cvmfs/.github/workflows/%.yml: cvmfs/cvmfs/cvmfs.cc
 	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --artifact-server-path=$${ARTIFACTS_DIR} --privileged --workflows=.github/workflows/$* |& tee ../$@.wip
 	mv $@.wip $@
 
+unprotected.act.done:
+	getent passwd runner || useradd -m runner
+	test -e /etc/sudoers.d/99-act || echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-act
+	which node
+	cd cvmfs \
+	&& sudo -u runner git config --global --add safe.directory "$${PWD}" \
+	&& sudo -u runner act --rebuild=false --pull=false  --verbose=false --detect-event=true --artifact-server-path="$${PWD}"/artifacts --workflows=.github/workflows/ways-to-test-cvmfs.yml -P ubuntu-26.04=-self-hosted --local-repository=andrey-utkin/ways-to-test-cvmfs=/usr/local/src/ways-to-test-cvmfs
+
 all.act.done: cvmfs/cvmfs/cvmfs.cc
 	# Likes a pristine workcopy, fails if finds locally-produced CMakeCache
 	export DOCKER_HOST=${DOCKER_HOST} && \
