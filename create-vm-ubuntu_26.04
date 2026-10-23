@@ -77,6 +77,7 @@ apt-get install -y \
 	nnn \
 	pigz \
 	podman \
+	psmisc \
 	python3-pip \
 	qalc \
 	ripgrep \
@@ -87,6 +88,8 @@ apt-get install -y \
 	which \
 	;
 pip install --break-system-packages podman-compose
+# docker nftables rules break podman containers networking
+systemctl disable docker
 EOF
 
 for repo in ${MOUNTED_REPOS[@]}; do
@@ -124,7 +127,10 @@ tar -cf - \
 || true
 popd
 
-
+# we need to restart to drop docker nftables rules down
+incus stop ${VM_NAME}
+#incus snapshot ${VM_NAME} "0"
+incus start ${VM_NAME}
 
 #incus exec --cwd /usr/local/src/ways-to-test-cvmfs "$VM_NAME" -- bash -l <<EOF
 #make --keep-going build.done
