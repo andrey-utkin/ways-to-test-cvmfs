@@ -927,6 +927,7 @@ ci.%.done: build.done cvmfs/test/src/%/main
 	@mv $@.wip $@
 	@if [[ -f ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
 
+POOLED_CI_PRINT_LINES ?= 1
 pooled.ci.%.done: build.done cvmfs/test/src/%/main
 	@ENGINE=${ENGINE} \
 	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
@@ -934,7 +935,11 @@ pooled.ci.%.done: build.done cvmfs/test/src/%/main
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       ../../../pooled.ci.one-test $* &> $@.wip
 	@mv $@.wip $@
-	@if [[ -f pooled.ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi
+	@if [[ ${POOLED_CI_PRINT_LINES} == 1 ]]; then \
+		if [[ -f pooled.ci.$*.PASSED ]]; then echo PASS $*; else echo FAIL $*; fi; \
+	else \
+		if [[ -f pooled.ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi; \
+	fi
 
 .PHONY: pooled.ci.clean
 pooled.ci.clean: pool-teardown
