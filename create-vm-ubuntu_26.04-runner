@@ -13,7 +13,7 @@ which jq
 # enp5s0: in archlinux, ubuntu...
 IFNAME=enp5s0
 
-incus create --vm images:ubuntu/26.04 "${VM_NAME}" -c security.secureboot=false -c security.nesting=true -c security.privileged=true -c limits.memory=8GiB -c limits.cpu=2 -d root,size=20GiB
+incus create --vm images:ubuntu/26.04 "${VM_NAME}" -c security.secureboot=false -c security.nesting=true -c security.privileged=true -c limits.memory=8GiB -c limits.cpu=2 -d root,size=100GiB
 
 incus start "$VM_NAME"
 # Wait for ipv4 IP
