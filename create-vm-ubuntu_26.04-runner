@@ -64,6 +64,7 @@ apt-get install -y \
 	nnn \
 	pigz \
 	podman \
+	psmisc \
 	python3-pip \
 	qalc \
 	ripgrep \
@@ -121,6 +122,10 @@ INNER_EOF
 setup_runner
 create_service
 
+# docker nftables rules break podman containers networking
+systemctl disable docker
 EOF
 
+incus stop ${VM_NAME}
 incus snapshot ${VM_NAME} "0"
+incus start ${VM_NAME}
