@@ -1,0 +1,126 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+
+: ${RUNNER_GITHUB_REG_URL:=https://github.com/andrey-utkin/cvmfs}
+: ${VM_HOSTNAME:=gha-runner-ubuntu26}
+: ${VM_NAME:=local:$VM_HOSTNAME}
+: ${RUNNER_INSTANCE_NAME:=$VM_HOSTNAME}
+[[ -v RUNNER_GITHUB_REG_TOKEN ]]
+
+which jq
+
+# enp5s0: in archlinux, ubuntu...
+IFNAME=enp5s0
+
+incus create --vm images:ubuntu/26.04 "${VM_NAME}" -c security.secureboot=false -c security.nesting=true -c security.privileged=true -c limits.memory=8GiB -c limits.cpu=2 -d root,size=20GiB
+
+incus start "$VM_NAME"
+# Wait for ipv4 IP
+while ! incus list --format json $(echo "${VM_NAME}" | sed -e 's/:/: /') | jq --raw-output .[0].state.network."$IFNAME".addresses[0].address | grep -F . >/dev/null; do echo -n .; sleep 1; done
+
+RUNNER_VERSION="2.338.1"
+RUNNER_USER="runner"
+RUNNER_DIR="/home/runner"
+incus exec "${VM_NAME}" -- bash -euo pipefail -x <<EOF
+while ! (systemctl is-active multi-user.target && ping -c1 -W1 google.com)&>/dev/null; do sleep 1; done
+mkdir -p /etc/udev && echo children_max=1 >> /etc/udev/udev.conf
+echo options overlay index=off > /etc/modprobe.d/overlay.conf
+echo overlay > /etc/modules
+echo overlay > /etc/modules-load.d/overlay.conf
+
+echo 'kernel.perf_event_paranoid = 1' > /etc/sysctl.d/10-rr.conf
+sysctl -w kernel.perf_event_paranoid=1
+
+hostnamectl hostname $VM_HOSTNAME
+
+# Add Docker's official GPG key:
+apt-get update
+apt-get install -y ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+# Add the repository to Apt sources:
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu   noble stable" | tee /etc/apt/sources.list.d/docker.list
+apt-get update
+apt-get install -y \
+	bash-completion \
+	bc \
+	btop \
+	colordiff \
+	containerd.io \
+	debugedit \
+	docker-buildx-plugin \
+	docker-ce \
+	docker-ce-cli \
+	docker-compose-plugin \
+	fakeroot \
+	git \
+	iotop \
+	jq \
+	make \
+	ncdu \
+	neovim \
+	nnn \
+	pigz \
+	podman \
+	python3-pip \
+	qalc \
+	ripgrep \
+	rsync \
+	sudo \
+	tmux \
+	virtme-ng \
+	which \
+	;
+pip install --break-system-packages podman-compose
+
+useradd -m runner
+echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/99-gha-runner
+sudo -u runner sudo true
+
+setup_runner() {
+    echo "Setting up runner..."
+    cd "$RUNNER_DIR" || exit
+    curl -o actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz \
+	-L https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+
+    tar -xaf ./actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz
+    #bin/installdependencies.sh
+    sudo -u "$RUNNER_USER" ./config.sh \
+        --url "$RUNNER_GITHUB_REG_URL" \
+        --token "$RUNNER_GITHUB_REG_TOKEN" \
+        --name "$RUNNER_INSTANCE_NAME" \
+        --unattended \
+        --work _work
+}
+
+create_service() {
+    echo "Creating systemd service..."
+    cat > /etc/systemd/system/github-runner.service << INNER_EOF
+[Unit]
+Description=GitHub Actions Runner
+After=network.target
+[Service]
+ExecStart=${RUNNER_DIR}/run.sh
+User=${RUNNER_USER}
+WorkingDirectory=${RUNNER_DIR}
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=5min
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target
+INNER_EOF
+
+    systemctl daemon-reload
+    systemctl enable --now github-runner
+}
+
+setup_runner
+create_service
+
+EOF
+
+incus snapshot ${VM_NAME} "0"
