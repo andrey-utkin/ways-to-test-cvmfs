@@ -628,7 +628,7 @@ cvmfs/.github/workflows/%.yml: cvmfs/cvmfs/cvmfs.cc
 	act --rebuild=false --pull=false ${ACT_PLATFORM_OPTS}  --verbose=true --detect-event=true --artifact-server-path=$${ARTIFACTS_DIR} --privileged --workflows=.github/workflows/$* |& tee ../$@.wip
 	mv $@.wip $@
 
-unprotected.act.done:
+unprotected.act.done: cvmfs/cvmfs/cvmfs.cc
 	getent passwd runner || useradd -m runner
 	test -e /etc/sudoers.d/99-act || echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/99-act
 	which node
