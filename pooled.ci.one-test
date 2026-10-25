@@ -19,7 +19,7 @@ pick_container() {
 		sleep 1
 	done
 	while true; do
-		if [[ -f container-pool/terminate ]]; then
+		if [[ -f ../terminate ]]; then
 			exit 1
 		fi
 		[[ "$(basename $PWD)" == available ]]
@@ -36,13 +36,13 @@ pick_container() {
 	popd &>/dev/null
 }
 
-CONTAINER_ID=$(set -euo pipefail; pick_container $@)
+CONTAINER_ID=$(set -euo pipefail; pick_container "$@")
 EXEC_LOG=pooled.ci."$1".log
 CONT_LOG=pooled.ci.container."$CONTAINER_ID".log
-echo $(date '+%F_%T') TAKEN BY "$@" >> "$CONT_LOG"
+echo "$(date '+%F_%T') TAKEN BY $*" >> "$CONT_LOG"
 cleanup() {
 	mv container-pool/taken/"$CONTAINER_ID" container-pool/available/
-	echo $(date '+%F_%T') RELEASED BY "$@" >> "$CONT_LOG"
+	echo "$(date '+%F_%T') RELEASED BY $*" >> "$CONT_LOG"
 }
 trap cleanup HUP INT TERM EXIT
 
@@ -51,31 +51,31 @@ set +e
 RC=$?
 set -e
 logs_filename=$(mktemp --tmpdir=. --suffix=.tar pooled.ci."$1".logs.XXXXXXX)
-"${PRIORITIZE[@]}" ${ENGINE} cp "${CONTAINER_ID}":/var/log/tests.logs.tar "$logs_filename"
+"${PRIORITIZE[@]}" "${ENGINE}" cp "${CONTAINER_ID}":/var/log/tests.logs.tar "$logs_filename"
 trap - HUP INT TERM EXIT
 cleanup
 "${PRIORITIZE[@]}" zstd --fast --rm --force "$logs_filename" &>/dev/null
-if [[ "$RC" == 0 ]] \
+if [[ "$RC" == 0 ]]; \
 then
-	echo $(date '+%F_%T') "$1 PASSED" | tee -a "$CONT_LOG"
+	echo "$(date '+%F_%T') $1 PASSED" | tee -a "$CONT_LOG"
 	mv "$EXEC_LOG" pooled.ci."$1".PASSED
 else
-	echo $(date '+%F_%T') "$1 FAILED" | tee -a "$CONT_LOG"
+	echo "$(date '+%F_%T') $1 FAILED" | tee -a "$CONT_LOG"
 	mv "$EXEC_LOG" pooled.ci."$1".FAILED
 fi
 
-if [[ -x "${WORKCOPY_IN_CONTAINER}"/build/cvmfs2-rr-replay-all ]]; then
+if [[ -x "${WORKCOPY_IN_HOST}"/build/cvmfs2-rr-replay-all ]]; then
 	REPLAY_LOG=pooled.ci."$1".rr-replay-all.log
 	set +e
-	"${WORKCOPY_IN_CONTAINER}"/build/cvmfs2-rr-replay-all > "$REPLAY_LOG"
+	"${WORKCOPY_IN_HOST}"/build/cvmfs2-rr-replay-all > "$REPLAY_LOG"
 	RC=$?
 	set -e
-	if [[ "$RC" == 0 ]] \
+	if [[ "$RC" == 0 ]]; \
 	then
-		echo $(date '+%F_%T') "$1 rr-replay-all PASSED" | tee -a "$CONT_LOG"
+		echo "$(date '+%F_%T') $1 rr-replay-all PASSED" | tee -a "$CONT_LOG"
 		mv "$REPLAY_LOG" "$REPLAY_LOG".PASSED
 	else
-		echo $(date '+%F_%T') "$1 rr-replay-all FAILED" | tee -a "$CONT_LOG"
+		echo "$(date '+%F_%T') $1 rr-replay-all FAILED" | tee -a "$CONT_LOG"
 		mv "$REPLAY_LOG" "$REPLAY_LOG".FAILED
 	fi
 fi
