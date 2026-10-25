@@ -821,6 +821,10 @@ s3_test_orig.teardown:
 	&& ${COMPOSE} down -v || true
 	rm s3_test_orig.all.done || true
 
+garage-setup.${ENGINE}.built:
+	${ENGINE} build -f cvmfs/test/common/container/s3-integration/Containerfile.garage-setup --tag cvmfs-dev:garage-setup
+	touch $@
+
 .PRECIOUS: cvmfs/test/common/container/s3-integration/s3-compose.%.yml
 cvmfs/test/common/container/s3-integration/s3-compose.%.yml: cvmfs/test/common/container/s3-integration/docker-compose.yml build.done
 	cp $< $@.wip
@@ -1031,7 +1035,7 @@ ci.done: build.done ${TESTS_LIST}
 	shopt -s nullglob; tar --force-local -caf ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* ci.*.FAILED ci.*.PASSED pooled.ci.*.done
 	touch $@
 
-S3_TESTS_LIST ?= s3_tests.list
+S3_TESTS_LIST ?= s3_tests.quick.list
 s3_ci.done: build.done ${S3_TESTS_LIST}
 	# it picks up concurrency from make invocation and MAKEFLAGS
 	echo "#!/usr/bin/env bash" > $@.plan
@@ -1046,9 +1050,116 @@ s3_ci.done: build.done ${S3_TESTS_LIST}
 	shopt -s nullglob; tar --force-local -caf s3_ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* s3_ci.*.FAILED s3_ci.*.PASSED s3_ci.*.done
 	touch $@
 
+s3_ci.quick.done: build.done s3_tests.quick.list
+	${MAKE} s3_ci.done S3_TESTS_LIST=s3_tests.quick.list
+	touch $@
+
+s3_ci.all.done: build.done s3_tests.all.list
+	${MAKE} s3_ci.done S3_TESTS_LIST=s3_tests.quick.list
+	touch $@
+
 .PHONY: s3_ci.clean
 s3_ci.clean:
 	cat ${S3_TESTS_LIST} | sed 's:.*:s3_test.&.clean:' | xargs /bin/echo 'export MAKEFLAGS='${MAKEFLAGS}'; exec ${MAKE} --keep-going' | bash -x || true
+
+pooled.s3_ci.setup: build.done
+	mkdir -p s3-env-pool/{booting,available,taken,failed,dead}
+	cp -a ../../../test.runner.s3.bash "${WORKCOPY_IN_HOST}"/
+	touch $@
+
+# without garage-setup.${ENGINE}.built, it will go to wrong place for build context
+pooled.s3_ci.pool-boot.done: pooled.s3_ci.setup ../../../iplocation.mmdb garage-setup.${ENGINE}.built
+	ENGINE=${ENGINE} \
+	       COMPOSE=${COMPOSE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       NETWORK=${NETWORK} \
+		../../../pooled.s3_ci.create-containers "${POOLSIZE}"
+	touch $@
+
+POOLED_S3_CI_PRINT_LINES ?= 1
+pooled.s3_ci.%.done: build.done cvmfs/test/src/%/main
+	@ENGINE=${ENGINE} \
+	       COMPOSE=${COMPOSE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       ../../../pooled.s3_ci.one-test $* &> $@.wip
+	@mv $@.wip $@
+	@if [[ ${POOLED_S3_CI_PRINT_LINES} == 1 ]]; then \
+		if [[ -f pooled.s3_ci.$*.PASSED ]]; then echo PASS $*; else echo FAIL $*; fi; \
+	else \
+		if [[ -f pooled.s3_ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi; \
+	fi
+
+.PHONY: pooled.s3_ci.teardown
+pooled.s3_ci.teardown:
+	rm -f pooled.s3_ci.pool-boot.done
+	set -x; \
+	set -e; \
+	cd s3-env-pool || exit 0; \
+	touch terminate; \
+	for dir in booting available taken; do \
+		pushd $${dir}; \
+		shopt -s nullglob; \
+		for x in *; do \
+			original_COMPOSE_FILE=$${PWD}/$${x}/compose.yml \
+			COMPOSE_FILE=../../cvmfs/test/common/container/s3-integration/$${x}.yml \
+			COMPOSE_PROJECT_NAME=$${x} \
+			${COMPOSE} down --timeout 0 || true; \
+			rm -f ../../cvmfs/test/common/container/s3-integration/$${x}.yml; \
+		done; \
+		popd; \
+	done
+	rm -rf s3-env-pool
+
+pooled.s3_ci.done: build.done pooled.s3_ci.setup ${S3_TESTS_LIST}
+	ENGINE=${ENGINE} \
+	       COMPOSE=${COMPOSE} \
+	       BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} \
+	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
+	       NPROC=${NPROC} \
+	       POOLSIZE=${POOLSIZE} \
+		nohup make pooled.s3_ci.pool-boot.done &> pooled.s3_ci.pool-boot.log &
+	shuf ${S3_TESTS_LIST} | sed 's:.*:pooled.s3_ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash || true
+	@echo
+	ls pooled.s3_ci.*.FAILED | sed -e 's/pooled.s3_ci.//' -e 's/.FAILED//' | tee pooled.s3_ci.failed-tests.list.${DATETIME} | wc -l
+	ls pooled.s3_ci.*.PASSED | sed -e 's/pooled.s3_ci.//' -e 's/.PASSED//' | tee pooled.s3_ci.passed-tests.list.${DATETIME} | wc -l
+	shopt -s nullglob; tar --force-local -caf pooled.s3_ci.logs.${DATETIME}.tar.zst ${TESTS_LIST}* pooled.s3_ci.*.FAILED pooled.s3_ci.*.PASSED pooled.s3_ci.container.*.log pooled.s3_ci.*.done
+	uptime > $@ # save loadavg
+
+pooled.s3_ci.quick.done: build.done pooled.s3_ci.setup s3_tests.quick.list
+	${MAKE} pooled.s3_ci.done S3_TESTS_LIST=s3_tests.quick.list
+	touch $@
+
+pooled.s3_ci.all.done: build.done pooled.s3_ci.setup s3_tests.all.list
+	${MAKE} pooled.s3_ci.done S3_TESTS_LIST=s3_tests.all.list
+	touch $@
+
+.PHONY: pooled.s3_ci.done-and-torndown
+pooled.s3_ci.done-and-torndown: build.done pooled.s3_ci.clean
+	export ENGINE COMPOSE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
+	       ${MAKE} pooled.s3_ci.done
+	#ENGINE=${ENGINE} ${MAKE} pooled.s3_ci.rr-replay-all.done
+	ENGINE=${ENGINE} ${MAKE} pooled.s3_ci.teardown
+	${MAKE} pooled.s3_ci.status | tee pooled.s3_ci.done.status
+
+.PHONY: pooled.s3_ci.clean
+pooled.s3_ci.clean: pooled.s3_ci.teardown
+	${MAKE} pooled.s3_ci.status | tee pooled.s3_ci.done.status
+	rm -rf pooled.s3_ci.done pooled.s3_ci.*.done  pooled.s3_ci.*.log  pooled.s3_ci.*.done.wip  pooled.s3_ci.*.PASSED  pooled.s3_ci.*.FAILED  pooled.s3_ci.*.logs.*.tar.zst
+	rm -f pooled.s3_ci.setup
+
+.PHONY: pooled.s3_ci.status
+pooled.s3_ci.status:
+	@ls s3-env-pool/* || true
+	@echo -n "STARTED: "; qalc --terse "now - stamptodate($(shell stat -c %Y -- pooled.s3_ci.setup 2>/dev/null))" | grep -v stamptodate || echo
+	@echo -n "ENDED: ";   qalc --terse "now - stamptodate($(shell stat -c %Y -- pooled.s3_ci.done  2>/dev/null))" | grep -v stamptodate || echo
+	@echo -n "TOOK: ";   qalc --terse "stamptodate($(shell stat -c %Y -- pooled.s3_ci.done 2>/dev/null)) - stamptodate($(shell stat -c %Y -- pooled.s3_ci.setup 2>/dev/null))" | grep -v stamptodate || echo
+	@grep -o 'load.*' pooled.s3_ci.done 2>/dev/null || uptime | grep -o 'load.*'
+	wc -l tests.list
+	ls pooled.s3_ci.*.PASSED 2>/dev/null | wc -l
+	ls pooled.s3_ci.*.FAILED 2>/dev/null | wc -l
+	@ls -1 pooled.s3_ci.*.FAILED 2>/dev/null || true
 
 pooled.ci.setup: build.done
 	mkdir -p container-pool/{booting,available,taken,failed,dead}
@@ -1147,9 +1258,28 @@ tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
 	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
 	mv $@.wip $@
 
-s3_tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
+s3_tests.all.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
 	ls cvmfs/test/src > $@.all-existing
-	(cd cvmfs && ../../../../list-active-tests.s3_ci) > $@.selected
+	(cd cvmfs && FILTER_QUICK=0 ../../../../list-active-tests.s3_ci) > $@.selected
+	# harness level (ways-to-test) exclusions
+	HARNESS_LEVEL_EXCL_FILE=../../../s3_tests.excludes.list; \
+	FLAVOUR_LEVEL_EXCL_FILE=../../s3_tests.excludes.list; \
+	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
+		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
+	else \
+		PF1=/dev/null; \
+	fi; \
+	if [[ -f $$FLAVOUR_LEVEL_EXCL_FILE ]]; then \
+		PF2=$$FLAVOUR_LEVEL_EXCL_FILE; \
+	else \
+		PF2=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	mv $@.wip $@
+
+s3_tests.quick.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
+	ls cvmfs/test/src > $@.all-existing
+	(cd cvmfs && FILTER_QUICK=1 ../../../../list-active-tests.s3_ci) > $@.selected
 	# harness level (ways-to-test) exclusions
 	HARNESS_LEVEL_EXCL_FILE=../../../s3_tests.excludes.list; \
 	FLAVOUR_LEVEL_EXCL_FILE=../../s3_tests.excludes.list; \

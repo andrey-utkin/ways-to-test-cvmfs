@@ -1,0 +1,91 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+shopt -s nullglob
+
+# one test name is the parameter for now, but this could change
+[[ $# == 1 ]]
+
+#export DOCKER_HOST=unix:///run/podman/podman.sock
+#PRIORITIZE=(nice -n19  ionice -c3  taskset --cpu-list $(( RANDOM % "$(nproc)" )) )
+#PRIORITIZE=(nice -n19  ionice -c3)
+PRIORITIZE=()
+
+WORKCOPY_IN_CONTAINER=/home/sftnight/cvmfs
+
+pick_env_dir() {
+	while ! pushd s3-env-pool/available &>/dev/null; do
+		if [[ -f s3-env-pool/terminate ]]; then
+			exit 1
+		fi
+		sleep 1
+	done
+	while true; do
+		if [[ -f ../terminate ]]; then
+			exit 1
+		fi
+		[[ "$(basename $PWD)" == available ]]
+		for CANDIDATE in *; do
+			if [[ -d "$CANDIDATE" ]] && [[ "$CANDIDATE" != '' ]] && mv "$CANDIDATE" ../taken/ &>/dev/null; then
+				echo "$@" >> ../taken/"$CANDIDATE"/work.log
+				echo "$CANDIDATE"
+				return 0
+			fi
+		done
+		sleep 1
+		continue
+	done
+	popd &>/dev/null
+}
+
+justname=$(set -euo pipefail; pick_env_dir "$@")
+EXEC_LOG=pooled.ci."$1".log
+CONT_LOG=pooled.ci.container."$justname".log
+echo "$(date '+%F_%T')" TAKEN BY "$@" >> "$CONT_LOG"
+cleanup() {
+	mv s3-env-pool/taken/"$justname" s3-env-pool/available/
+	echo "$(date '+%F_%T') RELEASED BY $*" >> "$CONT_LOG"
+}
+trap cleanup HUP INT TERM EXIT
+
+COMPOSE_FILE="$PWD"/s3-env-pool/taken/"$justname"/compose.yml
+COMPOSE_FILE="$PWD"/cvmfs/test/common/container/s3-integration/"$justname".yml
+COMPOSE_PROJECT_NAME="$justname"
+export COMPOSE_FILE COMPOSE_PROJECT_NAME
+set +e
+"${PRIORITIZE[@]}" "${COMPOSE}" exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight cvmfs-dev ./test.runner.s3.bash "$@" &> "$EXEC_LOG"
+RC=$?
+set -e
+echo "$RC" > "$justname".exitcode
+logs_filename="$justname".logs.tar
+"${PRIORITIZE[@]}" "${COMPOSE}" exec cvmfs-dev cat /var/log/tests.logs.tar > "$logs_filename"
+trap - HUP INT TERM EXIT
+cleanup
+#"${PRIORITIZE[@]}" zstd --fast --rm --force "$logs_filename" &>/dev/null
+if [[ "$RC" == 0 ]]; \
+then
+	echo "$(date '+%F_%T') $1 PASSED" | tee -a "$CONT_LOG"
+	mv "$EXEC_LOG" pooled.s3_ci."$1".PASSED
+else
+	echo "$(date '+%F_%T') $1 FAILED" | tee -a "$CONT_LOG"
+	mv "$EXEC_LOG" pooled.s3_ci."$1".FAILED
+fi
+
+#if [[ -x "${WORKCOPY_IN_HOST}"/build/cvmfs2-rr-replay-all ]]; then
+#	REPLAY_LOG=pooled.s3_ci."$1".rr-replay-all.log
+#	set +e
+#	"${WORKCOPY_IN_HOST}"/build/cvmfs2-rr-replay-all > "$REPLAY_LOG"
+#	RC=$?
+#	set -e
+#	if [[ "$RC" == 0 ]]; \
+#	then
+#		echo "$(date '+%F_%T') $1 rr-replay-all PASSED" | tee -a "$CONT_LOG"
+#		mv "$REPLAY_LOG" "$REPLAY_LOG".PASSED
+#	else
+#		echo "$(date '+%F_%T') $1 rr-replay-all FAILED" | tee -a "$CONT_LOG"
+#		mv "$REPLAY_LOG" "$REPLAY_LOG".FAILED
+#	fi
+#fi
+
+#exit "$RC"
+exit 0

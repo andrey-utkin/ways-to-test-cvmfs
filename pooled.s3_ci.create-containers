@@ -1,0 +1,78 @@
+#!/bin/bash
+set -euo pipefail
+set -x
+shopt -s nullglob
+
+#export DOCKER_HOST=unix:///run/podman/podman.sock
+#PRIORITIZE=(nice -n19  ionice -c3)
+PRIORITIZE=()
+
+NB_CONTAINERS=$1
+
+COMPOSE_ARGS_PIDS_UNLIMITED=()
+if [[ ${COMPOSE} == podman-compose ]]; then
+	COMPOSE_ARGS_PIDS_UNLIMITED+=(--podman-run-args=--pids-limit=-1);
+fi
+
+launch_one() {
+	dir=$1
+	justname=$(basename "$dir")
+	pushd "$dir"
+	YML=$PWD/compose.yml
+	# ./ - random-name.s3_ci/
+	# ../ - booting/
+	# ../../ - s3-env-pool/
+	# ../../../ - distro-name/
+	# ../../../cvmfs/ - codebase checkout
+	cp ../../../cvmfs/test/common/container/s3-integration/docker-compose.yml "$YML".wip
+	grep 'image: ghcr.io/cvmfs/cvmfs-dev:latest' "$YML".wip
+	sed -i -e "s#image: ghcr.io/cvmfs/cvmfs-dev:latest#image: ${BUILD_IMAGE_NAME}#" "$YML".wip
+	sed -i -e 's#^    cvmfs-dev:#&\n        command: /sbin/init#' "$YML".wip
+	sed -i -e 's#^    cvmfs-dev:#&\n        ulimits:\n          core: -1\n          nproc: -1#' "$YML".wip
+	sed -i -e '/container_name: cvmfs-garage-setup/d' "$YML".wip
+	mv "$YML".wip "$YML"
+
+	export COMPOSE_FILE="$YML"
+	export COMPOSE_PROJECT_NAME="$justname"
+	pushd ../../../cvmfs
+	# $dir remains correct absolute path to this env's dir
+	# But compose resolves relative paths relatively to compose spec file location, not CWD, which is a problem.
+	# So we copy $YML to the original dir, with a unique name.
+	COOLNAME=test/common/container/s3-integration/"$justname".yml
+	cp -a "$YML" "$COOLNAME"
+	export COMPOSE_FILE="$COOLNAME"
+	"${PRIORITIZE[@]}" "${COMPOSE}" "${COMPOSE_ARGS_PIDS_UNLIMITED[@]}" up -d
+	"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo bash -x cvmfs_config setup
+	"${PRIORITIZE[@]}" "${COMPOSE}" logs > "$dir"/setup.log
+	if [[ -v IP_DB ]]; then
+		"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo mkdir -p /var/lib/cvmfs-server/geo
+		"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo tee /var/lib/cvmfs-server/geo/iplocation.mmdb < "$IP_DB" >/dev/null
+	fi
+}
+
+make  ../../../iplocation.mmdb
+IP_DB=$(readlink -f ../../../iplocation.mmdb)
+mkdir -p s3-env-pool/{booting,available,taken,failed,dead}
+pushd s3-env-pool/booting
+NB_IN_POOL=$(shopt -s nullglob; for x in ../{booting,available,taken,failed,dead}/*; do echo "$x"; done | wc -l)
+HOW_MANY_MORE=$(( NB_CONTAINERS - NB_IN_POOL ))
+PIDS=()
+for _ in $(seq 1 "$HOW_MANY_MORE"); do
+	if [[ -f ../terminate ]]; then
+		break
+	fi
+	(
+	dir=$(mktemp --directory --tmpdir="$PWD" s3ci_XXXXXXX)
+	justname=$(basename "$dir")
+	# parenthesis so that change of dir in subprocess don't affect CWD in this context
+	if (launch_one "$dir"); then
+		mv "$justname" ../available/
+	else
+		mv "$justname" ../failed/
+	fi
+	) &
+	PIDS+=( $! )
+done
+for pid in "${PIDS[@]}"; do
+	wait "$pid"
+done

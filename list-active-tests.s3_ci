@@ -7,8 +7,21 @@ cd test
 
 source profiles/s3.sh
 
+filter_quick() {
+	if [[ "${FILTER_QUICK:-}" == 1 ]]; then
+		while read -r TESTDIR; do
+			if grep -q '^cvmfs_test_suites=[^#]*\<quick\>' src/"$TESTDIR"/main; then
+				echo "$TESTDIR"
+			fi
+		done
+	else
+		cat # return verbatim input
+	fi
+}
+
 comm -23 \
 	<(ls -1 -d $PROFILE_TESTSUITE | sort) \
 	<(echo $PROFILE_EXCLUSIONS | xargs -I{} printf "%s\n" {} | sort) \
 	| sed -e 's:^src/::' \
+	| filter_quick \
 	;
