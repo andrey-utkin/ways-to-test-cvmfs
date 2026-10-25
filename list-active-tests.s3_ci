@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euo pipefail
+
+[[ -f cvmfs/cvmfs.cc ]]
+
+cd test
+
+source profiles/s3.sh
+
+comm -23 \
+	<(ls -1 -d $PROFILE_TESTSUITE | sort) \
+	<(echo $PROFILE_EXCLUSIONS | xargs -I{} printf "%s\n" {} | sort) \
+	| sed -e 's:^src/::' \
+	;

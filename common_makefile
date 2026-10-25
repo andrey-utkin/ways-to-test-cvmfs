@@ -38,6 +38,8 @@ LOAD ?= ${NPROC}
 POOLSIZE ?= ${NPROC}
 CMAKE_EXTRA_OPTS ?= ""
 MAILTO ?= root
+KEEP_ON_SUCCESS ?= 0
+KEEP_ON_FAILURE ?= 1
 
 .PHONY: default debug clean wipe-build-image mrproper lint lint-fix shell.with-systemd
 default: tests.done
@@ -719,8 +721,6 @@ cmd.with-systemd: build.done
 ../../../iplocation.mmdb:
 	cd ../../.. && make iplocation.mmdb
 
-KEEP_ON_SUCCESS ?= 0
-KEEP_ON_FAILURE ?= 1
 cvmfs/test/src/%/main: ;
 
 franken.test.%.with-systemd.done: franken.build.done
@@ -862,10 +862,16 @@ s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.%.setup
 	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.log || touch $@.log
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv cvmfs/$@.out $@
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
+	; if [[ -f $@.FAILED ]]; then \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down; fi; \
+	else \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down; fi; \
+	fi
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
 s3_test.%.done: cvmfs/test/src/%/main s3_test.%.setup
-	cp -a ../../../test.runner.s3.bash cvmfs
+	rsync -a ../../../test.runner.s3.bash cvmfs/ # rsync does cp+mv, so is concurrency-race-free
 	pushd cvmfs \
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.$*.yml \
 	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
@@ -879,7 +885,16 @@ s3_test.%.done: cvmfs/test/src/%/main s3_test.%.setup
 	&& ${COMPOSE} exec cvmfs-dev cat /tmp/test.log > $@.wip || touch $@.wip
 	grep ^0 $@.exitcode && touch $@.PASSED || touch $@.FAILED
 	mv $@.wip $@
+	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
+	; if [[ -f $@.FAILED ]]; then \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down; fi; \
+	else \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down; fi; \
+	fi
 	(echo -n 'exit '; cat $@.exitcode) | bash
+
+s3_ci.%.done: cvmfs/test/src/%/main
+	${MAKE} s3_test.$*.done; ${MAKE} s3_test.$*.teardown
 
 .PHONY: s3_test.%.teardown
 s3_test.%.teardown: ../../../test.runner.s3-%.bash
@@ -1016,6 +1031,25 @@ ci.done: build.done ${TESTS_LIST}
 	shopt -s nullglob; tar --force-local -caf ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* ci.*.FAILED ci.*.PASSED pooled.ci.*.done
 	touch $@
 
+S3_TESTS_LIST ?= s3_tests.list
+s3_ci.done: build.done ${S3_TESTS_LIST}
+	# it picks up concurrency from make invocation and MAKEFLAGS
+	echo "#!/usr/bin/env bash" > $@.plan
+	echo "set -euo pipefail" >> $@.plan
+	echo "set -x" >> $@.plan
+	echo "export BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKE='${MAKE}' MAKEFLAGS='${MAKEFLAGS}' KEEP_ON_SUCCESS=0 KEEP_ON_FAILURE=0;" >> $@.plan
+	shuf ${S3_TESTS_LIST} | sed 's:.*:s3_ci.&.done:' | xargs /bin/echo 'exec $${MAKE} --keep-going' >> $@.plan
+	chmod a+x $@.plan
+	./$@.plan || true
+	ls s3_ci.*.FAILED | wc -l
+	ls s3_ci.*.PASSED | wc -l
+	shopt -s nullglob; tar --force-local -caf s3_ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* s3_ci.*.FAILED s3_ci.*.PASSED s3_ci.*.done
+	touch $@
+
+.PHONY: s3_ci.clean
+s3_ci.clean:
+	cat ${S3_TESTS_LIST} | sed 's:.*:s3_test.&.clean:' | xargs /bin/echo 'export MAKEFLAGS='${MAKEFLAGS}'; exec ${MAKE} --keep-going' | bash -x || true
+
 pooled.ci.setup: build.done
 	mkdir -p container-pool/{booting,available,taken,failed,dead}
 	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
@@ -1100,6 +1134,25 @@ tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
 	# harness level (ways-to-test) exclusions
 	HARNESS_LEVEL_EXCL_FILE=../../../tests.excludes.list; \
 	FLAVOUR_LEVEL_EXCL_FILE=../../tests.excludes.list; \
+	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
+		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
+	else \
+		PF1=/dev/null; \
+	fi; \
+	if [[ -f $$FLAVOUR_LEVEL_EXCL_FILE ]]; then \
+		PF2=$$FLAVOUR_LEVEL_EXCL_FILE; \
+	else \
+		PF2=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	mv $@.wip $@
+
+s3_tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
+	ls cvmfs/test/src > $@.all-existing
+	(cd cvmfs && ../../../../list-active-tests.s3_ci) > $@.selected
+	# harness level (ways-to-test) exclusions
+	HARNESS_LEVEL_EXCL_FILE=../../../s3_tests.excludes.list; \
+	FLAVOUR_LEVEL_EXCL_FILE=../../s3_tests.excludes.list; \
 	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
 		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
 	else \
