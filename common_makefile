@@ -1057,7 +1057,7 @@ s3_ci.done: build.done ${S3_TESTS_LIST}
 	./$@.plan || true
 	ls s3_ci.*.FAILED | wc -l
 	ls s3_ci.*.PASSED | wc -l
-	shopt -s nullglob; tar --force-local -caf s3_ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* s3_ci.*.FAILED s3_ci.*.PASSED s3_ci.*.done
+	shopt -s nullglob; tar --force-local -caf s3_ci.logs.$(shell date +%F_%T).tar.zst ${S3_TESTS_LIST}* s3_ci.*.FAILED s3_ci.*.PASSED s3_ci.*.done
 	touch $@
 
 s3_ci.quick.done: build.done s3_tests.quick.list
@@ -1134,7 +1134,7 @@ pooled.s3_ci.done: build.done pooled.s3_ci.setup ${S3_TESTS_LIST}
 	@echo
 	ls pooled.s3_ci.*.FAILED | sed -e 's/pooled.s3_ci.//' -e 's/.FAILED//' | tee pooled.s3_ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.s3_ci.*.PASSED | sed -e 's/pooled.s3_ci.//' -e 's/.PASSED//' | tee pooled.s3_ci.passed-tests.list.${DATETIME} | wc -l
-	shopt -s nullglob; tar --force-local -caf pooled.s3_ci.logs.${DATETIME}.tar.zst ${TESTS_LIST}* pooled.s3_ci.*.FAILED pooled.s3_ci.*.PASSED pooled.s3_ci.container.*.log pooled.s3_ci.*.done
+	shopt -s nullglob; tar --force-local -caf pooled.s3_ci.logs.${DATETIME}.tar.zst ${S3_TESTS_LIST}* pooled.s3_ci.*.FAILED pooled.s3_ci.*.PASSED pooled.s3_ci.container.*.log pooled.s3_ci.*.done
 	uptime > $@ # save loadavg
 
 pooled.s3_ci.quick.done: build.done pooled.s3_ci.setup s3_tests.quick.list
