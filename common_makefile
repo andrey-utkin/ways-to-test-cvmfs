@@ -317,6 +317,12 @@ rr.done: rr/CMakeLists.txt
 
 GRAFT_FLAVOUR ?= 2.11.2
 FRANKEN_BUILD_IMAGE_NAME ?= ${FLAVOUR}:${MY_DISTRO}-franken-${GRAFT_FLAVOUR}
+
+.PHONY: franken.build.wipe
+franken.build.wipe:
+	${ENGINE} image untag ${FRANKEN_BUILD_IMAGE_NAME} || true
+	rm -f franken.build.done
+
 franken.build.done: build.done
 	${ENGINE} stop --time 0 "${CONTAINER_NAME}" || true
 	${ENGINE} rm "${CONTAINER_NAME}" || true
