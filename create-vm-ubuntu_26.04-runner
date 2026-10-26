@@ -124,6 +124,7 @@ create_service
 
 # docker nftables rules break podman containers networking
 systemctl disable docker
+systemctl disable --now apparmor
 EOF
 
 incus stop ${VM_NAME}
