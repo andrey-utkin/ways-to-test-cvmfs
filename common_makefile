@@ -731,7 +731,11 @@ franken.s3_test.%.done: franken.build.done
 	cp -a s3_test.$*.done $@
 
 franken.s3_test.%.teardown:
-	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.teardown
+	${MAKE} BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.teardown
+
+franken.s3_test.%.done-and-torndown:
+	${MAKE} GRAFT_FLAVOUR=${GRAFT_FLAVOUR} BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} s3_test.$*.done || true
+	${MAKE} GRAFT_FLAVOUR=${GRAFT_FLAVOUR} BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} s3_test.$*.teardown || true
 
 franken.s3_test.%.clean: franken.s3_test.%.teardown
 	exec make BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} COMPOSE_PROJECT_NAME=franken-${GRAFT_FLAVOUR}-in-${COMPOSE_PROJECT_NAME} s3_test.$*.clean
