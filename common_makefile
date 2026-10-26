@@ -1135,10 +1135,10 @@ pooled.s3_ci.all.done: build.done pooled.s3_ci.setup s3_tests.all.list
 	${MAKE} pooled.s3_ci.done S3_TESTS_LIST=s3_tests.all.list
 	touch $@
 
-.PHONY: pooled.s3_ci.done-and-torndown
-pooled.s3_ci.done-and-torndown: build.done pooled.s3_ci.clean
+.PHONY: pooled.s3_ci.quick.done-and-torndown
+pooled.s3_ci.quick.done-and-torndown: build.done pooled.s3_ci.clean
 	export ENGINE COMPOSE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
-	       ${MAKE} pooled.s3_ci.done
+	       ${MAKE} pooled.s3_ci.quick.done
 	#ENGINE=${ENGINE} ${MAKE} pooled.s3_ci.rr-replay-all.done
 	ENGINE=${ENGINE} ${MAKE} pooled.s3_ci.teardown
 	${MAKE} pooled.s3_ci.status | tee pooled.s3_ci.done.status
