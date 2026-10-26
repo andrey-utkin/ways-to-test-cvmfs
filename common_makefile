@@ -1190,22 +1190,14 @@ franken.pooled.ci.done: franken.build.done
 		TESTS_LIST=${TESTS_LIST} \
 	make pooled.ci.done
 
-franken.pooled.s3_ci.quick.done: franken.build.done
+franken.pooled.s3_ci.%.done: franken.build.done
 	BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} \
 		ENGINE=${ENGINE} \
+		COMPOSE=${COMPOSE} \
 		NPROC=${NPROC} \
 		POOLSIZE=${POOLSIZE} \
-		TESTS_LIST=${TESTS_LIST} \
-	make pooled.s3_ci.quick.done; \
-	touch $@
-
-franken.pooled.s3_ci.all.done: franken.build.done
-	BUILD_IMAGE_NAME=${FRANKEN_BUILD_IMAGE_NAME} \
-		ENGINE=${ENGINE} \
-		NPROC=${NPROC} \
-		POOLSIZE=${POOLSIZE} \
-		TESTS_LIST=${TESTS_LIST} \
-	make pooled.s3_ci.all.done; \
+		S3_TESTS_LIST=${S3_TESTS_LIST} \
+	${MAKE} pooled.s3_ci.$*.done
 	touch $@
 
 pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
