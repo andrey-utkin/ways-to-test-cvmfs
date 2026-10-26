@@ -1228,7 +1228,7 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 pooled.ci.done-and-torndown: build.done pooled.ci.clean
 	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} pooled.ci.done
-	ENGINE=${ENGINE} ${MAKE} pooled.ci.rr-replay-all.done
+	#ENGINE=${ENGINE} ${MAKE} pooled.ci.rr-replay-all.done
 	ENGINE=${ENGINE} ${MAKE} pool-teardown
 	ENGINE=${ENGINE} ${MAKE} pooled.ci.status | tee pooled.ci.done.status
 
