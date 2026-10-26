@@ -1029,7 +1029,7 @@ pool-teardown:
 TESTS_LIST ?= tests.list
 ci.done: build.done ${TESTS_LIST}
 	cp -a ../../../test.runner.with-systemd.bash "${WORKCOPY_IN_HOST}"/
-	SHOULDBE=shuf ORMAYBE=cat cat ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
+	tac ${TESTS_LIST} | sed 's:.*:ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
 	ls ci.*.FAILED | wc -l
 	ls ci.*.PASSED | wc -l
 	shopt -s nullglob; tar --force-local -caf ci.logs.$(shell date +%F_%T).tar.zst ${TESTS_LIST}* ci.*.FAILED ci.*.PASSED pooled.ci.*.done
@@ -1042,7 +1042,7 @@ s3_ci.done: build.done ${S3_TESTS_LIST}
 	echo "set -euo pipefail" >> $@.plan
 	echo "set -x" >> $@.plan
 	echo "export BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKE='${MAKE}' MAKEFLAGS='${MAKEFLAGS}' KEEP_ON_SUCCESS=0 KEEP_ON_FAILURE=0;" >> $@.plan
-	shuf ${S3_TESTS_LIST} | sed 's:.*:s3_ci.&.done:' | xargs /bin/echo 'exec $${MAKE} --keep-going' >> $@.plan
+	tac ${S3_TESTS_LIST} | sed 's:.*:s3_ci.&.done:' | xargs /bin/echo 'exec $${MAKE} --keep-going' >> $@.plan
 	chmod a+x $@.plan
 	./$@.plan || true
 	ls s3_ci.*.FAILED | wc -l
@@ -1120,7 +1120,7 @@ pooled.s3_ci.done: build.done pooled.s3_ci.setup ${S3_TESTS_LIST}
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
 		nohup make pooled.s3_ci.pool-boot.done &> pooled.s3_ci.pool-boot.log &
-	shuf ${S3_TESTS_LIST} | sed 's:.*:pooled.s3_ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash || true
+	tac ${S3_TESTS_LIST} | sed 's:.*:pooled.s3_ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash || true
 	@echo
 	ls pooled.s3_ci.*.FAILED | sed -e 's/pooled.s3_ci.//' -e 's/.FAILED//' | tee pooled.s3_ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.s3_ci.*.PASSED | sed -e 's/pooled.s3_ci.//' -e 's/.PASSED//' | tee pooled.s3_ci.passed-tests.list.${DATETIME} | wc -l
@@ -1194,7 +1194,7 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
 		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
-	SHOULDBE=shuf ORMAYBE=cat shuf ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
+	tac ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
 	@echo
 	ls pooled.ci.*.FAILED | sed -e 's/pooled.ci.//' -e 's/.FAILED//' | tee pooled.ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.ci.*.PASSED | sed -e 's/pooled.ci.//' -e 's/.PASSED//' | tee pooled.ci.passed-tests.list.${DATETIME} | wc -l
