@@ -1156,7 +1156,7 @@ pooled.s3_ci.status:
 	@echo -n "ENDED: ";   qalc --terse "now - stamptodate($(shell stat -c %Y -- pooled.s3_ci.done  2>/dev/null))" | grep -v stamptodate || echo
 	@echo -n "TOOK: ";   qalc --terse "stamptodate($(shell stat -c %Y -- pooled.s3_ci.done 2>/dev/null)) - stamptodate($(shell stat -c %Y -- pooled.s3_ci.setup 2>/dev/null))" | grep -v stamptodate || echo
 	@grep -o 'load.*' pooled.s3_ci.done 2>/dev/null || uptime | grep -o 'load.*'
-	wc -l tests.list
+	wc -l s3_tests.*.list
 	ls pooled.s3_ci.*.PASSED 2>/dev/null | wc -l
 	ls pooled.s3_ci.*.FAILED 2>/dev/null | wc -l
 	@ls -1 pooled.s3_ci.*.FAILED 2>/dev/null || true
