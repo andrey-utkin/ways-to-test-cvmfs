@@ -1267,6 +1267,7 @@ tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
 	# harness level (ways-to-test) exclusions
 	HARNESS_LEVEL_EXCL_FILE=../../../tests.excludes.list; \
 	FLAVOUR_LEVEL_EXCL_FILE=../../tests.excludes.list; \
+	CHECKOUT_LEVEL_EXCL_FILE=tests.excludes.list; \
 	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
 		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
 	else \
@@ -1277,7 +1278,12 @@ tests.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-e2e-tests.ci_ubuntu
 	else \
 		PF2=/dev/null; \
 	fi; \
-	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	if [[ -f $$CHECKOUT_LEVEL_EXCL_FILE ]]; then \
+		PF3=$$CHECKOUT_LEVEL_EXCL_FILE; \
+	else \
+		PF3=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 --file=$$PF3 > $@.wip
 	mv $@.wip $@
 
 s3_tests.all.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
@@ -1286,6 +1292,7 @@ s3_tests.all.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
 	# harness level (ways-to-test) exclusions
 	HARNESS_LEVEL_EXCL_FILE=../../../s3_tests.excludes.list; \
 	FLAVOUR_LEVEL_EXCL_FILE=../../s3_tests.excludes.list; \
+	CHECKOUT_LEVEL_EXCL_FILE=s3_tests.excludes.list; \
 	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
 		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
 	else \
@@ -1296,7 +1303,12 @@ s3_tests.all.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
 	else \
 		PF2=/dev/null; \
 	fi; \
-	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	if [[ -f $$CHECKOUT_LEVEL_EXCL_FILE ]]; then \
+		PF3=$$CHECKOUT_LEVEL_EXCL_FILE; \
+	else \
+		PF3=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 --file=$$PF3 > $@.wip
 	mv $@.wip $@
 
 s3_tests.quick.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
@@ -1305,6 +1317,7 @@ s3_tests.quick.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
 	# harness level (ways-to-test) exclusions
 	HARNESS_LEVEL_EXCL_FILE=../../../s3_tests.excludes.list; \
 	FLAVOUR_LEVEL_EXCL_FILE=../../s3_tests.excludes.list; \
+	CHECKOUT_LEVEL_EXCL_FILE=s3_tests.excludes.list; \
 	if [[ -f $$HARNESS_LEVEL_EXCL_FILE ]]; then \
 		PF1=$$HARNESS_LEVEL_EXCL_FILE; \
 	else \
@@ -1315,7 +1328,12 @@ s3_tests.quick.list: cvmfs/cvmfs/cvmfs.cc ../../../list-active-tests.s3_ci
 	else \
 		PF2=/dev/null; \
 	fi; \
-	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 > $@.wip
+	if [[ -f $$CHECKOUT_LEVEL_EXCL_FILE ]]; then \
+		PF3=$$CHECKOUT_LEVEL_EXCL_FILE; \
+	else \
+		PF3=/dev/null; \
+	fi; \
+	cat $@.selected | grep -v --file=$$PF1 --file=$$PF2 --file=$$PF3 > $@.wip
 	mv $@.wip $@
 
 OTHER_TESTS_ENV ?= BOGUS=1
