@@ -45,8 +45,10 @@ launch_one() {
 	"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo bash -x cvmfs_config setup
 	"${PRIORITIZE[@]}" "${COMPOSE}" logs > "$dir"/setup.log
 	if [[ -v IP_DB ]]; then
-		"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo mkdir -p /var/lib/cvmfs-server/geo
-		"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo tee /var/lib/cvmfs-server/geo/iplocation.mmdb < "$IP_DB" >/dev/null
+		if ! "${COMPOSE}" exec -T cvmfs-dev  test -e /var/lib/cvmfs-server/geo/iplocation.mmdb; then
+			"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo mkdir -p /var/lib/cvmfs-server/geo
+			"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo tee /var/lib/cvmfs-server/geo/iplocation.mmdb < "$IP_DB" >/dev/null
+		fi
 	fi
 }
 
