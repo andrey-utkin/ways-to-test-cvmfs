@@ -49,7 +49,7 @@ TOPTARGETS := \
     tests-extended.teardown \
 
 
-FLAVOUR := testability
+FLAVOUR ?= testability
 
 # Exclude "ACT" as it's special
 SUBDIRS_VANILLA := $(wildcard vanilla/*/[a-z]*/)
