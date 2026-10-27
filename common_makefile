@@ -373,7 +373,7 @@ tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done # s3_
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
-tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done s3_test.quick.done
+tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done pooled.s3_ci.quick.done
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
@@ -384,7 +384,7 @@ tests.done-and-torndown: tests.done
 .PHONY: tests.teardown
 tests.teardown: pool-teardown
 .PHONY: tests-extended.teardown
-tests-extended.teardown: pool-teardown s3_test.quick.teardown
+tests-extended.teardown: pool-teardown pooled.s3_ci.teardown
 
 .PHONY: tests.clean
 tests.clean: s3_test.quick.clean pooled.ci.clean
@@ -402,7 +402,6 @@ tests-extended.email: tests-extended.email.draft
 	neomutt -H - -s '${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' -a tests.email.attachments/* -- ${MAILTO} < $@.wip
 	mv $@.wip $@
 
-#tests.email.draft: s3_test.quick.done pooled.ci.done
 tests.email.draft:
 	${MAKE} pooled.ci.done || true
 	> $@.wip
@@ -412,10 +411,6 @@ tests.email.draft:
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	rm -rf tests.email.attachments
 	mkdir  tests.email.attachments
-	#echo s3_test.quick.done >> $@.wip
-	#cat  s3_test.quick.done >> $@.wip || true
-
-	#grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/
 
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
@@ -439,7 +434,7 @@ tests.email.draft:
 	mv $@.wip $@
 
 tests-extended.email.draft:
-	${MAKE} s3_test.quick.done pooled.ci.done || true
+	${MAKE} pooled.s3_ci.quick.done pooled.ci.done || true
 	> $@.wip
 	echo 'Subject: ${FLAVOUR}/${MY_DISTRO} @ $(shell hostnamectl hostname)' >> $@.wip
 	echo >> $@.wip
@@ -447,21 +442,23 @@ tests-extended.email.draft:
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	rm -rf tests.email.attachments
 	mkdir  tests.email.attachments
-	echo s3_test.quick.done >> $@.wip
-	cat  s3_test.quick.done >> $@.wip || true
-
-	grep 'Failures: 0' s3_test.quick.done || ../../../failures-from-log s3_test.quick.done.log tests.email.attachments/ || true
+	echo pooled.s3_ci.quick.done >> $@.wip
+	cat  pooled.s3_ci.quick.done >> $@.wip || true
 
 	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
 	echo pooled.ci.done.status >> $@.wip
 	cat  pooled.ci.done.status >> $@.wip || true
 
-	#cp -a pooled.ci.*.FAILED tests.email.attachments/
+	(for i in {1..72}; do echo -n = ; done; echo) >> $@.wip # separation line
+	echo pooled.s3_ci.done.status >> $@.wip
+	cat  pooled.s3_ci.done.status >> $@.wip || true
+
+	#cp -a pooled.ci.*.FAILED pooled.s3_ci.*.FAILED tests.email.attachments/
 	# just copying may fail with
 	# "postdrop: warning: uid=0: File too large"
 	# "sendmail: fatal: root(0): message file too big"
 	shopt -s nullglob; \
-	for a in pooled.ci.*.FAILED; do \
+	for a in pooled.ci.*.FAILED pooled.s3_ci.*.FAILED; do \
 		size=$$(stat --format=%s $${a}); \
 		if [[ $${size} -gt 500000 ]]; then \
 			zstd -c -k --ultra -T0 -20 $${a} > tests.email.attachments/$${a}.zst; \
