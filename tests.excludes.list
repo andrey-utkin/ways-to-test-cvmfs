@@ -14,7 +14,6 @@
 634-reflogchecksum
 638-virtualdir
 685-mkfs_proxy
-689-inodes
 693-resetafter
 699-servermount
 802-repository_gateway_nested_catalogs
