@@ -369,11 +369,11 @@ packaged-install-deb.done: builder.image.done cvmfs/cvmfs/cvmfs.cc
 #tests.done: s3_test.all.done test.902-cvmfs-posix-tools.with-systemd.done test.901-ingestsql.with-systemd.done
 # tests.done: s3_test.all.done-and-torndown
 # s3_test is not parallelizable in vanilla
-tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done # s3_test.quick.done
+tests.done: unittests-parallel.done unittests_mockfuse.done pooled.ci.done-and-torndown
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
-tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done pooled.s3_ci.quick.done
+tests-extended.done: unittests.done unittests_mockfuse.done pooled.ci.done-and-torndown pooled.s3_ci.quick.done-and-torndown
 	cd cvmfs && git show --format=%H --no-patch HEAD > ../$@.git-hash
 	touch $@
 
