@@ -43,7 +43,7 @@ launch_one() {
 	export COMPOSE_FILE="$COOLNAME"
 	"${PRIORITIZE[@]}" "${COMPOSE}" "${COMPOSE_ARGS_PIDS_UNLIMITED[@]}" up -d
 	"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo bash -x cvmfs_config setup
-	"${PRIORITIZE[@]}" "${COMPOSE}" logs > "$dir"/setup.log
+	#"${PRIORITIZE[@]}" "${COMPOSE}" logs > "$dir"/setup.log
 	if [[ -v IP_DB ]]; then
 		if ! "${COMPOSE}" exec -T cvmfs-dev  test -e /var/lib/cvmfs-server/geo/iplocation.mmdb; then
 			"${PRIORITIZE[@]}" "${COMPOSE}" exec -u sftnight -T cvmfs-dev  sudo mkdir -p /var/lib/cvmfs-server/geo

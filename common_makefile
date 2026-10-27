@@ -850,12 +850,11 @@ s3_test.%.setup: build.done cvmfs/test/common/container/s3-integration/s3-compos
 	&& export COMPOSE_FILE=test/common/container/s3-integration/s3-compose.$*.yml \
 	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	&& ${COMPOSE} ${COMPOSE_ARGS_PIDS_UNLIMITED} up -d \
-	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev \
-		sudo bash -x cvmfs_config setup \
-		 \
-	&& ${COMPOSE} logs > ../$@.wip \
+	&& ${COMPOSE} exec -u sftnight -T cvmfs-dev sudo bash -x cvmfs_config setup \
 	;
-	mv $@.wip $@
+	#${COMPOSE} logs > ../$@.wip
+	#mv $@.wip $@
+	touch $@
 
 # This template target serves:
 # s3_test.all.done (runs test.runner.s3-all.bash)
