@@ -56,7 +56,7 @@ debug:
 	@#echo ${IMAGE_NAME}
 
 .PHONY: clean
-clean: tests.clean ci.clean
+clean: tests.clean tests-extended.clean ci.clean pooled.ci.clean pooled.s3_ci.clean
 	rm -f *.done *.FAILED *.PASSED *.exitcode
 
 .PHONY: wipe-build-image
@@ -387,7 +387,7 @@ tests.teardown: pool-teardown
 tests-extended.teardown: pool-teardown pooled.s3_ci.teardown
 
 .PHONY: tests.clean
-tests.clean: s3_test.quick.clean pooled.ci.clean
+tests.clean: s3_test.quick.clean pooled.ci.clean pooled.s3_ci.clean
 	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test.quick.done* tests.email tests.email.draft tests.email.attachments
 
 tests.email: tests.email.draft
