@@ -39,8 +39,8 @@ pick_env_dir() {
 }
 
 justname=$(set -euo pipefail; pick_env_dir "$@")
-EXEC_LOG=pooled.ci."$1".log
-CONT_LOG=pooled.ci.container."$justname".log
+EXEC_LOG=pooled.s3_ci."$1".log
+CONT_LOG=pooled.s3_ci.container."$justname".log
 echo "$(date '+%F_%T')" TAKEN BY "$@" >> "$CONT_LOG"
 cleanup() {
 	mv s3-env-pool/taken/"$justname" s3-env-pool/available/
