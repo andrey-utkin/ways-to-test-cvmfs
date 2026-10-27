@@ -49,6 +49,7 @@ trap cleanup HUP INT TERM EXIT
 set +e
 "${PRIORITIZE[@]}" ${ENGINE} exec --workdir "${WORKCOPY_IN_CONTAINER}" -u sftnight "${CONTAINER_ID}" ./test.runner.with-systemd.bash "$@" &> "$EXEC_LOG"
 RC=$?
+touch "$EXEC_LOG"
 set -e
 logs_filename=$(mktemp --tmpdir=. --suffix=.tar pooled.ci."$1".logs.XXXXXXX)
 "${PRIORITIZE[@]}" "${ENGINE}" cp "${CONTAINER_ID}":/var/log/tests.logs.tar "$logs_filename"
