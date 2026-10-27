@@ -1147,7 +1147,7 @@ pooled.s3_ci.all.done: build.done pooled.s3_ci.setup s3_tests.all.list
 	touch $@
 
 .PHONY: pooled.s3_ci.quick.done-and-torndown
-pooled.s3_ci.quick.done-and-torndown: build.done pooled.s3_ci.clean
+pooled.s3_ci.quick.done-and-torndown: build.done
 	export ENGINE COMPOSE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} pooled.s3_ci.quick.done
 	#ENGINE=${ENGINE} ${MAKE} pooled.s3_ci.rr-replay-all.done
@@ -1224,7 +1224,7 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	#touch $@
 
 .PHONY: pooled.ci.done-and-torndown
-pooled.ci.done-and-torndown: build.done pooled.ci.clean
+pooled.ci.done-and-torndown: build.done
 	export ENGINE BUILD_IMAGE_NAME WORKCOPY_IN_CONTAINER WORKCOPY_IN_HOST NPROC LOAD POOLSIZE TESTS_LIST; \
 	       ${MAKE} pooled.ci.done
 	#ENGINE=${ENGINE} ${MAKE} pooled.ci.rr-replay-all.done
