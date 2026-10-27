@@ -5,6 +5,7 @@
 
 TOPTARGETS := \
     tests.done \
+    tests-extended.done \
     unittests.done \
     clean \
     mrproper \
