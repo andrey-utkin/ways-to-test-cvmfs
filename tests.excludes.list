@@ -1,6 +1,7 @@
 059-fallbackproxy
 066-killall
 536-healthcheck
+544-cvmfsdirtab
 577-garbagecollecthiddenstratum1revision
 580-automaticgarbagecollectionstratum1
 611-idleclient
@@ -17,3 +18,5 @@
 693-resetafter
 699-servermount
 802-repository_gateway_nested_catalogs
+808-repository-gateway_watchdog
+826-gateway-ingestsql-stress
