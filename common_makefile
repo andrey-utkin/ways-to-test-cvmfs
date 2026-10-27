@@ -386,9 +386,12 @@ tests.teardown: pool-teardown
 .PHONY: tests-extended.teardown
 tests-extended.teardown: pool-teardown pooled.s3_ci.teardown
 
+.PHONY: tests-extended.clean
+tests-extended.clean: tests.clean
+
 .PHONY: tests.clean
 tests.clean: s3_test.quick.clean pooled.ci.clean pooled.s3_ci.clean
-	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status ci.done s3_test.quick.done* tests.email tests.email.draft tests.email.attachments
+	rm -rf tests.done tests.done.git-hash unittests*.done pooled.ci.done pooled.ci.done.status pooled.s3_ci.done.status ci.done s3_test.*.done* pooled.s3_ci.*.done* tests.email tests.email.draft tests.email.attachments
 
 tests.email: tests.email.draft
 	cp -a $< $@.wip
