@@ -18,6 +18,13 @@ TOPTARGETS := \
     pooled.ci.done \
     pool-teardown \
     pooled.ci.done-and-torndown \
+    pooled.s3_ci.status \
+    pooled.s3_ci.teardown \
+    pooled.s3_ci.clean \
+    pooled.s3_ci.quick.done \
+    pooled.s3_ci.quick.done-and-torndown \
+    pooled.s3_ci.all.done \
+    pooled.s3_ci.all.done-and-torndown \
     git-fetch-reset \
     wipe-build \
     wipe-build-image \
