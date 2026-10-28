@@ -79,7 +79,7 @@ pacman -Sy --noconfirm \
 	virtme-ng \
 	which \
 	;
-#pacman -Sy --noconfirm docker docker-compose
+#pacman -Sy --noconfirm docker docker-compose docker-buildx
 EOF
 
 for repo in ${MOUNTED_REPOS[@]}; do
