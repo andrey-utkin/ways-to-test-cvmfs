@@ -1,7 +1,9 @@
+114-reload-configrepo-automount
 516-createsnapshotadvanced
 521-createmultiplesnapshots
 534-interleavingpublishes
 535-letter
+536-healthcheck
 544-cvmfsdirtab
 545-hugecatalogwarning
 557-basicgarbagecollect
@@ -16,6 +18,7 @@
 597-graft
 603-automaticgarbagecollectionrace
 604-cvmfsrsync
+621-snapshotallgcall
 635-earlynestedcreation
 801-repository_gateway_slow
 802-repository_gateway_nested_catalogs

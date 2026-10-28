@@ -1,5 +1,6 @@
 059-fallbackproxy
 066-killall
+114-reload-configrepo-automount
 536-healthcheck
 544-cvmfsdirtab
 577-garbagecollecthiddenstratum1revision
