@@ -122,3 +122,11 @@ RUN dnf install -y \
 	python3-rpm \
 	rpm-build \
 	;
+
+RUN mkdir -p /usr/local/src/rr-build
+RUN git clone https://github.com/rr-debugger/rr/ --branch 5.10.0 /usr/local/src/rr-build/rr
+RUN cd /usr/local/src/rr-build/rr \
+	&& cmake -G Ninja -Ddisable32bit=ON . \
+	&& cmake --build .  --parallel 4 \
+	&& cmake --build . --target install --parallel 4 \
+	;
