@@ -12,6 +12,7 @@
 618-repometainfo
 621-snapshotallgcall
 627-reflog
+633a-changedfiles
 634-reflogchecksum
 638-virtualdir
 685-mkfs_proxy
