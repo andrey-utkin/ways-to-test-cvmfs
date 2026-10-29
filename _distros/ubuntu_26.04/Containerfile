@@ -1,5 +1,9 @@
 FROM ubuntu:26.04
 
+# archive locations return AAAA, which APT stubbornly hangs onto even though interface is not configured for IPv6 = eternal waiting.
+# https://unix.stackexchange.com/questions/9940/convince-apt-get-not-to-use-ipv6-method
+RUN echo 'precedence ::ffff:0:0/96 100' >> /etc/gai.conf
+
 RUN apt update
 
 RUN apt install -y \
