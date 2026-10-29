@@ -52,6 +52,15 @@ launch_one() {
 	fi
 }
 
+random_project_name() {
+	for _ in {1..100} ; do
+		name=s3ci_"$(xxd -l 4 -p /dev/urandom)"
+		mkdir "$name" || continue
+		break
+	done
+	echo "$name"
+}
+
 make  ../../../iplocation.mmdb
 IP_DB=$(readlink -f ../../../iplocation.mmdb)
 mkdir -p s3-env-pool/{booting,available,taken,failed,dead}
@@ -64,8 +73,11 @@ for _ in $(seq 1 "$HOW_MANY_MORE"); do
 		break
 	fi
 	(
-	dir=$(mktemp --directory --tmpdir="$PWD" s3ci_XXXXXXX)
-	justname=$(basename "$dir")
+	# Compose projects require lowercase.
+	# Podman skips the uppercase characters, docker fails to start it.
+	# "invalid project name "s3ci_WGyeHeE": must consist only of lowercase alphanumeric characters, hyphens, and underscores as well as start with a letter or number"
+	justname=$(random_project_name)
+	dir="$PWD"/"$justname"
 	# parenthesis so that change of dir in subprocess don't affect CWD in this context
 	if (launch_one "$dir"); then
 		mv "$justname" ../available/
