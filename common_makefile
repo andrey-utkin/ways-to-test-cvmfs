@@ -834,7 +834,7 @@ s3_test_orig.teardown:
 	rm s3_test_orig.all.done || true
 
 garage-setup.${ENGINE}.built:
-	${ENGINE} build -f cvmfs/test/common/container/s3-integration/Containerfile.garage-setup --tag cvmfs-dev:garage-setup
+	${ENGINE} build -f cvmfs/test/common/container/s3-integration/Containerfile.garage-setup --tag cvmfs-dev:garage-setup cvmfs
 	touch $@
 
 .PRECIOUS: cvmfs/test/common/container/s3-integration/s3-compose.%.yml
