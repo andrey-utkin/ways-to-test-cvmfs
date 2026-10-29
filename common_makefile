@@ -178,7 +178,7 @@ report-make:
 		RC=$${PIPESTATUS[0]}; \
 		if [[ $${RC} == 0 ]]; then OUTCOME='ok'; else OUTCOME='FAIL'; fi; \
 		${MAKE} report SUBJECT="$${OUTCOME} ${DESCR}" IN_REPLY_TO_HEADER="In-Reply-To: <$${MESSAGE_ID}>" CONTENTS_FILES="${GOALS}"; \
-		#exit $${RC} # if we
+		exit $${RC}
 
 succeed:
 	true
