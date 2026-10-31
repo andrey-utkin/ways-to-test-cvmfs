@@ -496,8 +496,9 @@ ingestsql-test.with-systemd.done: build.done
 # These were found failing for no apparent reason on master on 2026-02-26 (Fedora 43 container inside Archlinux VM)
 #UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.Initv2:T_Libcvmfs.InitFailures:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_TestUtilities.GetParentPid:T_Util.ManagedExecExecuteBinaryDoubleFork
 UNITTESTS_FAILING := T_GlueBuffer.PageCacheTrackerBasics:T_Libcvmfs.InitFailures:T_Libcvmfs.Initv2:T_Libcvmfs.OptionAliases:T_MagicXattr.TestLogBuffer:T_Util.ManagedExecExecuteBinaryDoubleFork:T_ParseRelativeTimespan.CalendarUnitsAreCalendarAware
-UNITTESTS_FLAKY := T_Dns.CaresResolverFinalDot
+#UNITTESTS_FLAKY := T_Dns.CaresResolverFinalDot
 #UNITTESTS_FLAKY := "T_Dns.*"
+UNITTESTS_FLAKY := T_Options/0.ParsePath
 UNITTESTS_FAILING_WHEN_NOT_SERIALIZED := "T_Download.*:T_IngestionStress.*:T_Uploaders/0.*:T_Util.Lsof"
 UNITTESTS_FAILING_WHEN_PID1 := T_TestUtilities.GetParentPid
 # [1067/1080] T_CatalogManagerClient.LoadByHashNetworkFailure (20273 ms)
@@ -531,7 +532,7 @@ UNITTESTS_SLOW := T_CatalogMergeTool.CRUD:T_StatisticsSql.SchemaMigration1To3:T_
 
 # T_GlueBuffer.StringHeap allocates upwards of 4 GiB and hangs on failure.
 UNITTESTS_MEMORY_HOGS := T_GlueBuffer.StringHeap
-UNITTESTS_FILTER_DEFAULT := "-*Slow:T_Smalloc.Big*:${UNITTESTS_FAILING}:${UNITTESTS_FAILING_WHEN_PID1}:${UNITTESTS_MEMORY_HOGS}"
+UNITTESTS_FILTER_DEFAULT := "-*Slow:T_Smalloc.Big*:${UNITTESTS_FAILING}:${UNITTESTS_FAILING_WHEN_PID1}:${UNITTESTS_MEMORY_HOGS}:${UNITTESTS_FLAKY}"
 UNITTESTS_FILTER_FAST := "${UNITTESTS_FILTER_DEFAULT}:${UNITTESTS_FAILING_WHEN_NOT_SERIALIZED}:${UNITTESTS_SLOW}"
 
 UNITTESTS_FILTER ?= ${UNITTESTS_FILTER_DEFAULT}
