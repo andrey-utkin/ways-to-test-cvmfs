@@ -1098,7 +1098,7 @@ pooled.s3_ci.%.done: build.done cvmfs/test/src/%/main
 	       ../../../pooled.s3_ci.one-test $* &> $@.wip
 	@mv $@.wip $@
 	@if [[ ${POOLED_S3_CI_PRINT_LINES} == 1 ]]; then \
-		if [[ -f pooled.s3_ci.$*.PASSED ]]; then echo PASS $*; else echo FAIL $*; fi; \
+		if [[ -f pooled.s3_ci.$*.PASSED ]]; then echo PASS s3 $*; else echo FAIL s3 $*; fi; \
 	else \
 		if [[ -f pooled.s3_ci.$*.PASSED ]]; then echo -n .; else echo -n X; fi; \
 	fi
