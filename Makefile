@@ -5,6 +5,7 @@
 
 TOPTARGETS := \
     tests.done \
+    other-tests.done \
     tests-extended.done \
     unittests.done \
     clean \
@@ -38,6 +39,9 @@ TOPTARGETS := \
     s3_test.all.clean \
     franken.s3_test.quick.clean \
     franken.s3_test.all.clean \
+    franken.pooled.s3_ci.quick.done \
+    franken.pooled.s3_ci.quick.teardown \
+    franken.pooled.s3_ci.clean \
     s3_test.quick.done \
     s3_test.all.done \
     rr.done \
