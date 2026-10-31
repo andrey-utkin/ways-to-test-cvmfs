@@ -1131,8 +1131,9 @@ pooled.s3_ci.done: build.done pooled.s3_ci.setup ${S3_TESTS_LIST}
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
-		nohup make pooled.s3_ci.pool-boot.done &> pooled.s3_ci.pool-boot.log &
+	       make pooled.s3_ci.pool-boot.done &> pooled.s3_ci.pool-boot.log & echo $$! > pooled.s3_ci.pool-boot.pid || true
 	tac ${S3_TESTS_LIST} | sed 's:.*:pooled.s3_ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash || true
+	pkill --pidfile pooled.s3_ci.pool-boot.pid || true
 	@echo
 	ls pooled.s3_ci.*.FAILED | sed -e 's/pooled.s3_ci.//' -e 's/.FAILED//' | tee pooled.s3_ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.s3_ci.*.PASSED | sed -e 's/pooled.s3_ci.//' -e 's/.PASSED//' | tee pooled.s3_ci.passed-tests.list.${DATETIME} | wc -l
@@ -1215,8 +1216,9 @@ pooled.ci.done: build.done pooled.ci.setup ${TESTS_LIST}
 	       WORKCOPY_IN_HOST=${WORKCOPY_IN_HOST} \
 	       NPROC=${NPROC} \
 	       POOLSIZE=${POOLSIZE} \
-		nohup make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log &
+		make pooled.ci.pool-boot.done &> pooled.ci.pool-boot.log & echo $$! > pooled.ci.pool-boot.pid || true
 	tac ${TESTS_LIST} | sed 's:.*:pooled.ci.&.done:' | xargs /bin/echo exec make -j${POOLSIZE} --keep-going | BUILD_IMAGE_NAME=${BUILD_IMAGE_NAME} MAKEFLAGS= bash
+	pkill --pidfile pooled.ci.pool-boot.pid || true
 	@echo
 	ls pooled.ci.*.FAILED | sed -e 's/pooled.ci.//' -e 's/.FAILED//' | tee pooled.ci.failed-tests.list.${DATETIME} | wc -l
 	ls pooled.ci.*.PASSED | sed -e 's/pooled.ci.//' -e 's/.PASSED//' | tee pooled.ci.passed-tests.list.${DATETIME} | wc -l
