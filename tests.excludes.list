@@ -15,6 +15,7 @@
 633a-changedfiles
 634-reflogchecksum
 638-virtualdir
+669-filestats
 685-mkfs_proxy
 693-resetafter
 699-servermount

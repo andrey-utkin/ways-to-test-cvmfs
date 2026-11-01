@@ -21,6 +21,7 @@
 621-snapshotallgcall
 633a-changedfiles
 635-earlynestedcreation
+669-filestats
 801-repository_gateway_slow
 802-repository_gateway_nested_catalogs
 820-commit-gateway
