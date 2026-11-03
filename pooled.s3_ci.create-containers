@@ -83,6 +83,8 @@ for _ in $(seq 1 "$HOW_MANY_MORE"); do
 		mv "$justname" ../available/
 	else
 		mv "$justname" ../failed/
+		echo "Container env $justname start failed, pool compromised, signaling termination"
+		touch ../terminate
 	fi
 	) &
 	PIDS+=( $! )

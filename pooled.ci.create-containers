@@ -52,6 +52,8 @@ launch_one() {
 		else
 			mv ./"$CONTAINER_ID" ../dead/
 		fi
+		echo "Container env $justname start failed, pool compromised, signaling termination"
+		touch ../terminate
 	) &
 }
 
