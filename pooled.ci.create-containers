@@ -54,6 +54,7 @@ launch_one() {
 		fi
 		echo "Container env $justname start failed, pool compromised, signaling termination"
 		touch ../terminate
+		exit 1
 	) &
 }
 
@@ -65,7 +66,11 @@ for i in $(seq 1 "$HOW_MANY_MORE"); do
 	if [[ -f ../terminate ]]; then
 		break
 	fi
-	launch_one
+	if ! launch_one; then
+		echo "Container env launching failed, pool compromised, signaling termination"
+		touch ../terminate
+		exit 1
+	fi
 	sleep 1
 done
 wait
