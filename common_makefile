@@ -831,7 +831,7 @@ s3_test_orig.all.done:
 s3_test_orig.teardown:
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/docker-compose.yml \
 	&& export COMPOSE_PROJECT_NAME=orig_${COMPOSE_PROJECT_NAME} \
-	&& ${COMPOSE} down -v || true
+	&& ${COMPOSE} down --volumes || true
 	rm s3_test_orig.all.done || true
 
 garage-setup.${ENGINE}.built:
@@ -880,9 +880,9 @@ s3_test.%.done: ../../../test.runner.s3-%.bash s3_test.%.setup
 	mv cvmfs/$@.out $@
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	; if [[ -f $@.FAILED ]]; then \
-		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down; fi; \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down --volumes; fi; \
 	else \
-		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down; fi; \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down --volumes; fi; \
 	fi
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
@@ -903,9 +903,9 @@ s3_test.%.done: cvmfs/test/src/%/main s3_test.%.setup
 	mv $@.wip $@
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	; if [[ -f $@.FAILED ]]; then \
-		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down; fi; \
+		if [[ ${KEEP_ON_FAILURE} == 0 ]]; then ${COMPOSE} down --volumes; fi; \
 	else \
-		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down; fi; \
+		if [[ ${KEEP_ON_SUCCESS} == 0 ]]; then ${COMPOSE} down --volumes; fi; \
 	fi
 	(echo -n 'exit '; cat $@.exitcode) | bash
 
@@ -917,13 +917,13 @@ s3_test.%.teardown: ../../../test.runner.s3-%.bash
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml \
 	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	&& if ! [[ -f $${COMPOSE_FILE} ]]; then exit 0; fi \
-	&& ${COMPOSE} down -v || true
+	&& ${COMPOSE} down --volumes || true
 	rm -f s3_test.$*.setup
 s3_test.%.teardown: cvmfs/test/src/%/main
 	export COMPOSE_FILE=cvmfs/test/common/container/s3-integration/s3-compose.$*.yml \
 	&& export COMPOSE_PROJECT_NAME=$*_${COMPOSE_PROJECT_NAME} \
 	&& if ! [[ -f $${COMPOSE_FILE} ]]; then exit 0; fi \
-	&& ${COMPOSE} down -v || true
+	&& ${COMPOSE} down --volumes || true
 	rm -f s3_test.$*.setup
 
 .PHONY: s3_test.%.clean
@@ -1117,7 +1117,7 @@ pooled.s3_ci.teardown:
 			original_COMPOSE_FILE=$${PWD}/$${x}/compose.yml \
 			COMPOSE_FILE=../../cvmfs/test/common/container/s3-integration/$${x}.yml \
 			COMPOSE_PROJECT_NAME=$${x} \
-			${COMPOSE} down --timeout 0 || true; \
+			${COMPOSE} down --volumes --timeout 0 || true; \
 			rm -f ../../cvmfs/test/common/container/s3-integration/$${x}.yml; \
 		done; \
 		popd; \
