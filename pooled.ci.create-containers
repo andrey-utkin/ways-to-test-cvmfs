@@ -32,7 +32,11 @@ launch_one() {
 			-v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" \
 			"${BUILD_IMAGE_NAME}" /sbin/init
 	)
-	[[ "$CONTAINER_ID" != '' ]]
+	if [[ "$CONTAINER_ID" == '' ]]; then
+		echo "Container run command failed, pool compromised, signaling termination"
+		touch ../terminate
+		exit 1
+	fi
 	touch "$CONTAINER_ID"
 	(
 		# Docker workaround: exec immediately after run gives "Error setting up exec command in container ABCD: container ABCD is not running"
