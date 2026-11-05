@@ -10,7 +10,9 @@ PRIORITIZE=()
 NB_CONTAINERS=$1
 
 launch_one() {
+	set -euo pipefail
 	CONTAINER_ID=$(
+		set -euo pipefail
 		# Docker gives warning when
 		# --privileged is used with multiple containers having /dev/fuse.
 		# "path in container /dev/fuse already exists in privileged mode"
@@ -30,6 +32,7 @@ launch_one() {
 			-v "${WORKCOPY_IN_HOST}":"${WORKCOPY_IN_CONTAINER}" \
 			"${BUILD_IMAGE_NAME}" /sbin/init
 	)
+	[[ "$CONTAINER_ID" != '' ]]
 	touch "$CONTAINER_ID"
 	(
 		# Docker workaround: exec immediately after run gives "Error setting up exec command in container ABCD: container ABCD is not running"
