@@ -21,4 +21,5 @@
 699-servermount
 802-repository_gateway_nested_catalogs
 808-repository-gateway_watchdog
+814-expired_lease
 826-gateway-ingestsql-stress

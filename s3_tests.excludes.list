@@ -24,6 +24,7 @@
 669-filestats
 801-repository_gateway_slow
 802-repository_gateway_nested_catalogs
+814-expired_lease
 820-commit-gateway
 824-dirfd-mem
 825-gateway-ingest-stress
