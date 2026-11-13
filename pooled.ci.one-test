@@ -65,6 +65,20 @@ else
 	mv "$EXEC_LOG" pooled.ci."$1".FAILED
 fi
 
+"${ENGINE}" exec "${CONTAINER_ID}" bash -l -x -euo pipefail <<'EOF'
+rm -f /tmp/rr.tar.gz
+REC_DIRS=( $( ls /tmp/*-*/mmaps | xargs -I {} dirname {} ) )
+COMPLETE_REC_DIRS=( $( for dir in ${REC_DIRS[@]}; do [[ -e "$dir"/incomplete ]] || echo "$dir"; done ) )
+if [[ "${COMPLETE_REC_DIRS[*]}" != '' ]]; then
+	tar -caf /tmp/rr.tar.gz "${COMPLETE_REC_DIRS[@]}"
+	rm -rf "${COMPLETE_REC_DIRS[@]}"
+fi
+EOF
+if "${ENGINE}" exec "${CONTAINER_ID}" mv /tmp/rr.tar.gz /tmp/"$1".rr.tar.gz; then
+	"${ENGINE}" cp "${CONTAINER_ID}":/tmp/"$1".rr.tar.gz > pooled.s3_ci."$1".rr.tar.gz
+	#${COMPOSE} exec cvmfs-dev rm  /tmp/"$1".rr.tar.gz # optionally, remove immediately
+fi
+
 if [[ -x "${WORKCOPY_IN_HOST}"/build/cvmfs2-rr-replay-all ]]; then
 	REPLAY_LOG=pooled.ci."$1".rr-replay-all.log
 	set +e
