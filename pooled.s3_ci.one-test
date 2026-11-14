@@ -82,7 +82,7 @@ fi
 #fi
 ${COMPOSE} exec cvmfs-dev bash -l -x -euo pipefail <<'EOF'
 rm -f /tmp/rr.tar.gz
-REC_DIRS=( $( ls /tmp/*-*/mmaps | xargs -I {} dirname {} ) )
+REC_DIRS=( $( shopt -s nullglob; echo /tmp/*-*/mmaps | xargs -I {} dirname {} ) )
 COMPLETE_REC_DIRS=( $( for dir in ${REC_DIRS[@]}; do [[ -e "$dir"/incomplete ]] || echo "$dir"; done ) )
 if [[ "${COMPLETE_REC_DIRS[*]}" != '' ]]; then
 	tar -caf /tmp/rr.tar.gz "${COMPLETE_REC_DIRS[@]}"
