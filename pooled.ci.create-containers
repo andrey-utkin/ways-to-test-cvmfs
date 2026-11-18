@@ -25,6 +25,7 @@ launch_one() {
 			--device=/dev/fuse \
 			--cap-add=SYS_PTRACE \
 			--cap-add SYS_ADMIN \
+			--tmpfs /tmp \
 			--tmpfs /cvmfs \
 			--tmpfs /var/spool/cvmfs \
 			--security-opt seccomp=unconfined \
